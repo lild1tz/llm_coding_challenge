@@ -1,15 +1,39 @@
-version: "3.9"
+version: '3.9'
 
 services:
-  llm-structure-service:
+  hermes:
     build:
-      context: .
+      context: ./backend/hermes
       dockerfile: Dockerfile
-    container_name: llm-structure-service
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/password
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: password
     volumes:
-      - .:/app
-    restart: unless-stopped
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
