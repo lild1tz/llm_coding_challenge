@@ -1,39 +1,54 @@
 from fastapi import FastAPI
+from app.utils import get_embedding
 from app.prompts import fewshot_prompt
-from app.models import Output, Input
+from app.models import ProcessMessageOutput, ClassifyMessageOutput, InputMessage
 from app.config import Config
 from langchain_openai import ChatOpenAI
-import logging
+from transformers import AutoTokenizer
+import onnxruntime as ort
+from joblib import load
+from pathlib import Path
+import warnings
+warnings.filterwarnings("ignore")
 
 app = FastAPI()
 
 llm = ChatOpenAI(
     model_name=Config.OPENAI_MODEL,
     openai_api_key=Config.OPENAI_API_KEY,
-    base_url=Config.OPENAI_BASE_URL,
-).with_structured_output(Output)
+    base_url=Config.OPENAI_BASE_URL
+).with_structured_output(ProcessMessageOutput)
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+base_dir = Path(__file__).resolve().parent
+onnx_model_path = base_dir / "source" / "onnx_model" / "model.onnx"
+logreg_model_path = base_dir / "source" / "logreg_model.joblib"
 
-
-# massage = "Пахота зяби под мн тр\nПо Пу 26/488\nОтд 12 26/221\n\nПредп культ под оз пш\nПо Пу 215/1015\nОтд 12 128/317\nОтд 16 123/529\n\n2-е диск сах св под оз пш\nПо Пу 22/627\nОтд 11 22/217\n\n2-е диск сои под оз пш\nПо Пу 45/1907\nОтд 12 45/299"
-# formatted_prompt = fewshot_prompt.format(input=massage)
-# print(formatted_prompt)
+session = ort.InferenceSession(onnx_model_path.as_posix()) 
+tokenizer = AutoTokenizer.from_pretrained(Config.BERT_MODEL)
+clf = load(logreg_model_path)
 
 @app.post("/process_message")
-async def process_message(input: Input) -> Output:
+async def process_message(input: InputMessage) -> ProcessMessageOutput:
     massage = input.message
-    logger.info(f"Received message: {massage}")
     prompt = fewshot_prompt.format_prompt(input=massage)
-    logger.info(f"Prompt: {prompt.text}")
     table = await llm.ainvoke(prompt)
-    logger.info(f"Table: {table}")
     return table
+
+
+@app.post("/classify_message")
+async def classify_message(input: InputMessage) -> ClassifyMessageOutput:
+    massage = input.message
+    embedding = get_embedding(massage, tokenizer, session)
+    prediction = clf.predict_proba([embedding])[0]
+    predicted_class = int(prediction.argmax())
+    probability = round(prediction[1], 2)
+    return ClassifyMessageOutput(probability=probability, prediction=predicted_class)
+
 
 if __name__ == "__main__":
     import uvicorn
+    print(onnx_model_path)
     uvicorn.run(app, host="0.0.0.0", port=8000)
-#     #uvicorn app.main:app --reload
+     #uvicorn app.main:app --reload
 
 

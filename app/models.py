@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Literal
 
 class TableRow(BaseModel):
     date: Optional[str] = Field(None, description="Дата выполнения операции, если представлена в сообщении, в формате ДД.ММ")
@@ -11,11 +11,15 @@ class TableRow(BaseModel):
     val_day: Union[int, float, None] = Field(None, description="Валовый сбор за день (в центнерах), если применимо")
     val_beginning: Union[int, float, None] = Field(None, description="Суммарный валовый сбор с начала операции (в центнерах), если применимо")
 
-class Output(BaseModel):
+class ProcessMessageOutput(BaseModel):
     table: List[TableRow]
 
-class Input(BaseModel):
+class InputMessage(BaseModel):
     message: str = Field(..., description="Сообщение от пользователя")
 
+class ClassifyMessageOutput(BaseModel):
+    probability: float = Field(..., description="Вероятность того, что сообщение относится к классу 'Операция'")
+    prediction: Literal[0, 1] = Field(..., description="Предсказанный класс сообщения (0 - не операция, 1 - операция)")
+    
 
 
