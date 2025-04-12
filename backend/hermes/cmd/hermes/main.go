@@ -2,79 +2,75 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
-	qrterminal "github.com/mdp/qrterminal/v3"
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/store/sqlstore"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/managers/saver"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services"
+	"github.com/lild1tz/llm_coding_challenge/backend/libs/go/config"
 	"go.mau.fi/whatsmeow/types/events"
-	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
-func eventHandler(evt interface{}) {
-	switch v := evt.(type) {
-	case *events.Message:
-		fmt.Println("Received a message!", v.Message.GetConversation())
-		info, _ := json.Marshal(v.Info)
-		fmt.Println("Received a message!", string(info))
-	}
+type Config struct {
+	Services services.Config
 }
 
 func main() {
-	// |------------------------------------------------------------------------------------------------------|
-	// | NOTE: You must also import the appropriate DB connector, e.g. github.com/mattn/go-sqlite3 for SQLite |
-	// |------------------------------------------------------------------------------------------------------|
+	ctx, cancel := context.WithCancel(context.Background())
 
-	databaseURL := os.Getenv("DATABASE_URL")
-
-	dbLog := waLog.Stdout("Database", "DEBUG", true)
-	container, err := sqlstore.New("pgx", databaseURL, dbLog)
+	cfg, err := config.LoadConfig[Config]()
 	if err != nil {
-		panic(err)
+		log.Fatalf("failed to load config: %v", err)
 	}
-	// If you want multiple sessions, remember their JIDs and use .GetDevice(jid) or .GetAllDevices() instead.
-	deviceStore, err := container.GetFirstDevice()
-	if err != nil {
-		panic(err)
-	}
-	clientLog := waLog.Stdout("Client", "DEBUG", true)
-	client := whatsmeow.NewClient(deviceStore, clientLog)
-	client.AddEventHandler(eventHandler)
 
-	if client.Store.ID == nil {
-		// No ID stored, new login
-		qrChan, _ := client.GetQRChannel(context.Background())
-		err = client.Connect()
-		if err != nil {
-			panic(err)
+	clients, err := services.NewClients(cfg.Services)
+	if err != nil {
+		log.Fatalf("failed to create clients: %v", err)
+	}
+
+	defer clients.Release()
+
+	manager := saver.NewManager(clients)
+
+	clients.Whatsapp.AddEventHandler(func(evt interface{}) {
+		if ctx.Err() != nil {
+			return
 		}
-		for evt := range qrChan {
-			if evt.Event == "code" {
-				// Render the QR code here
-				// e.g. qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-				// or just manually `echo 2@... | qrencode -t ansiutf8` in a terminal
-				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-			} else {
-				fmt.Println("Login event:", evt.Event)
+
+		switch v := evt.(type) {
+		case *events.Message:
+			msg := v.Message
+			sender := v.Info.Sender.String()
+			// chat := v.Info.Chat.String() filter by chat
+			pushName := v.Info.PushName
+			timestamp := v.Info.Timestamp
+
+			if msg.Conversation != nil {
+				fmt.Println("Тип: простой текст")
+				fmt.Println("Текст:", msg.GetConversation())
+
+				go func() {
+					err := manager.ProcessTextMessage(ctx, sender, pushName, timestamp, msg.GetConversation())
+					if err != nil {
+						log.Printf("failed to process text message: %v", err)
+					}
+				}()
+				//text := msg.GetConversation()
 			}
 		}
-	} else {
-		// Already logged in, just connect
-		err = client.Connect()
-		if err != nil {
-			panic(err)
-		}
-	}
+	})
+	clients.Whatsapp.Connect()
 
 	// Listen to Ctrl+C (you can also do something else that prevents the program from exiting)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
 
-	client.Disconnect()
+	cancel()
+	time.Sleep(5 * time.Second)
 }

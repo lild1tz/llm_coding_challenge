@@ -19,6 +19,7 @@ FROM alpine:latest
 COPY --from=builder /app/bin/hermes /app/hermes
 COPY hermes/migrations /app/migrations
 COPY hermes/scripts/entrypoint.sh /app/entrypoint.sh
+COPY hermes/.env /app/.env
 RUN chmod +x /app/entrypoint.sh
 COPY --from=builder /go/bin/migrate /usr/local/bin/migrate
 

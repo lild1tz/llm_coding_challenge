@@ -1,0 +1,36 @@
+{
+    "Chat":"79182340838@s.whatsapp.net",
+    "Sender":"79853651515@s.whatsapp.net",
+    "IsFromMe":true,
+    "IsGroup":false,
+    "AddressingMode":"",
+    "SenderAlt":"19799883149419@lid",
+    "RecipientAlt":"100339177009381@lid",
+    "BroadcastListOwner":"",
+    "ID":"3AD5FE476EC9AF0E1F16",
+    "ServerID":0,
+    "Type":"text",
+    "PushName":"Валерий Хегай",
+    "Timestamp":"2025-04-12T00:45:16Z",
+    "Category":"",
+    "Multicast":false,
+    "MediaType":"",
+    "Edit":"",
+    "MsgBotInfo":{
+        "EditType":"",
+        "EditTargetID":"",
+        "EditSenderTimestampMS":"0001-01-01T00:00:00Z"
+    },
+    "MsgMetaInfo":{
+        "TargetID":"",
+        "TargetSender":"",
+        "DeprecatedLIDSession":null,
+        "ThreadMessageID":"",
+        "ThreadMessageSenderJID":""
+    },
+    "VerifiedName":null,
+    "DeviceSentMeta":{
+        "DestinationJID":"79182340838@s.whatsapp.net",
+        "Phash":""
+    }
+}

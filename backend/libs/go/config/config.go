@@ -17,7 +17,7 @@ const (
 // LoadConfig [ConfigType] loading config with json tag as env var
 // and cfgDefault tag as default value
 func LoadConfig[T any]() (*T, error) {
-	_ = godotenv.Load()
+	_ = godotenv.Load("/app/.env")
 
 	config := new(T)
 	val := reflect.ValueOf(config).Elem()
