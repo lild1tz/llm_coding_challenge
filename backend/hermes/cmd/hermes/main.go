@@ -61,6 +61,13 @@ func main() {
 					}
 				}()
 				//text := msg.GetConversation()
+			} else if msg.ImageMessage != nil {
+				fmt.Println("Тип: изображение")
+				fmt.Println("Текст:", msg.ImageMessage.GetURL())
+
+				// go func() {
+				// 	err := manager.ProcessImageMessage(ctx, sender, pushName, timestamp, msg.ImageMessage)
+				// }()
 			}
 		}
 	})

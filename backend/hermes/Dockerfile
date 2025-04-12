@@ -16,6 +16,7 @@ COPY  . .
 RUN go build -o /app/bin/hermes ./hermes/cmd/hermes/main.go
 
 FROM alpine:latest
+RUN apk add tzdata
 COPY --from=builder /app/bin/hermes /app/hermes
 COPY hermes/migrations /app/migrations
 COPY hermes/scripts/entrypoint.sh /app/entrypoint.sh
