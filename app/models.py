@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import List, Union, Optional, Literal
 
 class TableRow(BaseModel):
-    date: Optional[str] = Field(None, description="Дата выполнения операции, если представлена в сообщении, в формате ДД.ММ")
+    date: Optional[str] = Field(None, description="Дата выполнения операции, если представлена в сообщении, в формате ДД.ММ или ДД.ММ.ГГГГ")
     division: str = Field(..., description="Подразделение, выполнявшее работу (например, АОР, Юг, Мир и т.д.)")
     operation: str = Field(..., description="Наименование выполненной полевой операции (например, Пахота, Дискование и т.д.)")
     culture: str = Field(..., description="Сельскохозяйственная культура, к которой относится операция")

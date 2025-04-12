@@ -3,6 +3,5 @@
 
 ### Запуск контейнера
 ```docker
-docker build -t llm-structure-service .
-docker run -d --env-file .env -p 8000:8000 --name llm-structure-service llm-structure-service
+docker-compose up --build
 ```
