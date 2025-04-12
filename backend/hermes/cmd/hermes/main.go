@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -19,6 +20,8 @@ func eventHandler(evt interface{}) {
 	switch v := evt.(type) {
 	case *events.Message:
 		fmt.Println("Received a message!", v.Message.GetConversation())
+		info, _ := json.Marshal(v.Info)
+		fmt.Println("Received a message!", string(info))
 	}
 }
 
@@ -27,8 +30,10 @@ func main() {
 	// | NOTE: You must also import the appropriate DB connector, e.g. github.com/mattn/go-sqlite3 for SQLite |
 	// |------------------------------------------------------------------------------------------------------|
 
+	databaseURL := os.Getenv("DATABASE_URL")
+
 	dbLog := waLog.Stdout("Database", "DEBUG", true)
-	container, err := sqlstore.New("pgx", "postgres://postgres:postgres@postgres:5432/password", dbLog)
+	container, err := sqlstore.New("pgx", databaseURL, dbLog)
 	if err != nil {
 		panic(err)
 	}

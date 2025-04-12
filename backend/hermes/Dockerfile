@@ -2,14 +2,24 @@ FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
-COPY go.mod go.sum ./
-RUN go mod download
+RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+COPY hermes/migrations hermes/migrations
+
+COPY go.work ./
+COPY libs/go.mod ./libs/
+COPY hermes/go.mod ./hermes/
+
+RUN go work sync && cd hermes && go mod download
 
 COPY  . .
-RUN go build -o /app/bin/hermes main.go
+RUN go build -o /app/bin/hermes ./hermes/cmd/hermes/main.go
 
 FROM alpine:latest
-WORKDIR /app
 COPY --from=builder /app/bin/hermes /app/hermes
+COPY hermes/migrations /app/migrations
+COPY hermes/scripts/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+COPY --from=builder /go/bin/migrate /usr/local/bin/migrate
 
-CMD ["/app/hermes"]
+CMD ["/app/entrypoint.sh"]

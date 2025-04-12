@@ -1,4 +1,4 @@
-module hermes
+module github.com/lild1tz/llm_coding_challenge/backend/hermes
 
 go 1.24.2
 
