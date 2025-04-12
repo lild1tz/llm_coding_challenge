@@ -1,35 +1,40 @@
 version: '3.9'
 
 services:
-  hermes:
+  apollo:
     build:
-      context: ./backend/hermes
-      dockerfile: Dockerfile
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/password
-    depends_on:
-      postgres:
-        condition: service_healthy
+      context: ./backend/apollo
+    ports:
+      - "8000:8000"
     networks:
       - app-network
-
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: password
+      POSTGRES_USER: hermes
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: hermes
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
       - app-network
-    
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD-SHELL", "pg_isready -U hermes -d hermes"]
+      interval: 1s
+      timeout: 2s
+  hermes:
+    build:
+      context: ./backend
+      dockerfile: hermes/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://hermes:password@postgres:5432/hermes?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
 
 networks:
   app-network:
