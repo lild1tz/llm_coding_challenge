@@ -8,6 +8,7 @@ import (
 
 type Client interface {
 	PredictTableFromText(ctx context.Context, text string) (models.Table, error)
+	CheckVerbiage(ctx context.Context, text string) (bool, error)
 }
 
 type Config struct {

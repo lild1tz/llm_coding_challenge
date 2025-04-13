@@ -46,7 +46,47 @@ func (c *Client) Release() error {
 	return nil
 }
 
-func (c *Client) AddMessage(ctx context.Context, sender string, name string, timestamp time.Time, text string, role string) (int, error) {
+func (c *Client) AddMessage(ctx context.Context, workerID int, timestamp time.Time, text string, role string) error {
+	query := `
+	INSERT INTO hermes_data.messages (worker_id, created_at, content, role)
+	VALUES ($1, $2, $3, $4);
+	`
+
+	_, err := c.Exec(ctx, query, workerID, timestamp, text, role)
+	if err != nil {
+		return fmt.Errorf("failed to insert message: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Client) AddVerbiage(ctx context.Context, workerID int, timestamp time.Time, text string) error {
+	query := `
+	INSERT INTO hermes_data.verbiage (worker_id, created_at, content)
+	VALUES ($1, $2, $3);
+	`
+
+	_, err := c.Exec(ctx, query, workerID, timestamp, text)
+	if err != nil {
+		return fmt.Errorf("failed to insert message: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Client) GetWorkerID(ctx context.Context, whatsappID *string, telegramID *string, name string) (int, error) {
+	if whatsappID == nil && telegramID == nil {
+		return 0, fmt.Errorf("whatsappID and telegramID are nil")
+	}
+
+	if whatsappID != nil {
+		return c.GetWorkerIDByWhatsappID(ctx, *whatsappID, name)
+	}
+
+	return c.GetWorkerIDByTelegramID(ctx, *telegramID)
+}
+
+func (c *Client) GetWorkerIDByWhatsappID(ctx context.Context, whatsappID string, name string) (int, error) {
 	query := `
 	INSERT INTO hermes_data.worker (whatsapp_id, name)
 	VALUES ($1, $2)
@@ -56,19 +96,27 @@ func (c *Client) AddMessage(ctx context.Context, sender string, name string, tim
 	`
 
 	var workerID int
-	err := c.QueryRow(ctx, query, sender, name).Scan(&workerID)
+	err := c.QueryRow(ctx, query, whatsappID, name).Scan(&workerID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to set and get worker ID: %w", err)
 	}
 
-	query = `
-	INSERT INTO hermes_data.messages (worker_id, created_at, content, role)
-	VALUES ($1, $2, $3, $4);
+	return workerID, nil
+}
+
+func (c *Client) GetWorkerIDByTelegramID(ctx context.Context, telegramID string) (int, error) {
+	query := `
+	INSERT INTO hermes_data.worker (telegram_id)
+	VALUES ($1)
+	ON CONFLICT (telegram_id) 
+	DO UPDATE SET telegram_id = EXCLUDED.telegram_id
+	RETURNING id
 	`
 
-	_, err = c.Exec(ctx, query, workerID, timestamp, text, role)
+	var workerID int
+	err := c.QueryRow(ctx, query, telegramID).Scan(&workerID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to insert message: %w", err)
+		return 0, fmt.Errorf("failed to set and get worker ID: %w", err)
 	}
 
 	return workerID, nil
@@ -81,13 +129,29 @@ func (c *Client) GetNumberOfMessages(ctx context.Context, workerID int, timestam
 	WHERE worker_id = $1 AND created_at <= $2;
 	`
 
-	var count int
-	err := c.QueryRow(ctx, query, workerID, timestamp).Scan(&count)
-	if err != nil || count == 0 {
+	var numberOfMessages int
+	err := c.QueryRow(ctx, query, workerID, timestamp).Scan(&numberOfMessages)
+	if err != nil {
 		return 0, fmt.Errorf("failed to get message count: %w", err)
 	}
 
-	return count, nil
+	return numberOfMessages, nil
+}
+
+func (c *Client) GetNumberOfVerbiage(ctx context.Context, workerID int, timestamp time.Time) (int, error) {
+	query := `
+	SELECT COUNT(*) 
+	FROM hermes_data.verbiage 
+	WHERE worker_id = $1 AND created_at <= $2;
+	`
+
+	var numberOfVerbiage int
+	err := c.QueryRow(ctx, query, workerID, timestamp).Scan(&numberOfVerbiage)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get verbiage count: %w", err)
+	}
+
+	return numberOfVerbiage, nil
 }
 
 func (c *Client) AddTable(ctx context.Context, createdAt time.Time, table models.Table) error {

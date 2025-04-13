@@ -24,3 +24,14 @@ func (c *stubClient) PredictTableFromText(ctx context.Context, text string) (mod
 		},
 	}, nil
 }
+
+var x int
+
+func (c *stubClient) CheckVerbiage(ctx context.Context, text string) (bool, error) {
+	x++
+	if x%2 == 0 {
+		return true, nil
+	}
+
+	return false, nil
+}
