@@ -17,14 +17,16 @@ services:
       test: ["CMD-SHELL", "pg_isready -U hermes -d hermes"]
       interval: 1s
       timeout: 2s
+    restart: unless-stopped
 
-  # apollo:
-  #   build:
-  #     context: ./backend/apollo
-  #   ports:
-  #     - "8000:8000"
-  #   networks:
-  #     - app-network
+  apollo:
+    build:
+      context: ./backend/apollo
+    ports:
+      - "8000:8000"
+    networks:
+      - app-network
+    restart: unless-stopped
   hermes:
     build:
       context: ./backend
@@ -36,6 +38,7 @@ services:
         condition: service_healthy
     networks:
       - app-network
+    restart: unless-stopped
 
 networks:
   app-network:
