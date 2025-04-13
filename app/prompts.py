@@ -1,9 +1,10 @@
 import pandas as pd
+from operator import itemgetter
 from langchain.prompts import PromptTemplate, FewShotPromptTemplate
 from app.informations import examples, cultures, operations, units
 
 prefix = f"""
-Ты AI-ассистент для сервиса структурирования сообщени от пользователей агрономов.
+Ты AI-ассистент агроном для сервиса структурирования сообщени от пользователей агрономов.
 Твоя задача - структурировать сообщение в таблицу, содержащую информацию о выполненных работах.
 Чтобы корреткно выполнить задачу тебе нужно следовать инструкциям:
     1. Ознакомься с примерами которые даны ниже, в них на вход приходит сообщение от пользователя и таблица которая должна быть получена на выходе.
@@ -78,17 +79,17 @@ output:
 {output}
 
 Объяснение:
-{explanation}
+{reasoning}
 =======
 """
 
 example_prompt = PromptTemplate(
-    input_variables=["input", "output", "explanation"],
+    input_variables=["input", "output", 'reasoning'],
     template=example_template,
 )
 
 fewshot_prompt = FewShotPromptTemplate(
-    examples=examples,
+    examples=list(itemgetter(1, 2, 4, 7, 9, 10, 13)(examples)),
     example_prompt=example_prompt,
     prefix=prefix,
     suffix=suffix,

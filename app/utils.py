@@ -12,3 +12,7 @@ def get_embedding(text: str, tokenizer, session):
     ort_outputs = session.run(None, ort_inputs)
     embedding = ort_outputs[0].mean(axis=1)[0]
     return embedding
+
+def ocr_photo(model, photo_base64: str) -> str:
+    pass
+    

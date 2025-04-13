@@ -12,3 +12,4 @@ class Config:
     LANGSMITH_API_KEY = os.getenv('LANGSMITH_API_KEY')
     LANGSMITH_PROJECT = os.getenv('LANGSMITH_PROJECT')
     BERT_MODEL = os.getenv('BERT_MODEL')
+    MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY')
