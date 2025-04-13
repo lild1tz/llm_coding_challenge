@@ -35,7 +35,7 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, sender string, name st
 		log.Println("failed to save message to drive: %w", err)
 	}
 
-	table, err := m.clients.Apollo.PredictTextMessage(ctx, text)
+	table, err := m.clients.Apollo.PredictTableFromText(ctx, text)
 	if err != nil {
 		return fmt.Errorf("failed to predict text message: %w", err)
 	}

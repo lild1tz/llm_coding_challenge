@@ -55,7 +55,7 @@ type Clients struct {
 	Postgres    *postgres.Client
 	Whatsapp    *whatsapp.Client
 	Googledrive *googledrive.Client
-	Apollo      *apollo.Client
+	Apollo      apollo.Client
 }
 
 func (c *Clients) Release() error {

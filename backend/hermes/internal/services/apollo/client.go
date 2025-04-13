@@ -10,23 +10,19 @@ import (
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/models"
 )
 
-type Config struct {
-	ApolloURL string `json:"APOLLO_URL"`
-}
-
-func NewClient(cfg Config) *Client {
-	return &Client{
+func newClient(cfg Config) *client {
+	return &client{
 		Client: &http.Client{},
 		cfg:    cfg,
 	}
 }
 
-type Client struct {
+type client struct {
 	*http.Client
 	cfg Config
 }
 
-func (c *Client) Release() error {
+func (c *client) Release() error {
 	return nil
 }
 
@@ -38,7 +34,7 @@ type ResponseBody struct {
 	Table models.Table `json:"table"`
 }
 
-func (c *Client) PredictTextMessage(ctx context.Context, text string) (models.Table, error) {
+func (c *client) PredictTableFromText(ctx context.Context, text string) (models.Table, error) {
 	jsonBody, err := json.Marshal(RequestBody{Message: text})
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)
