@@ -14,7 +14,7 @@ type Client interface {
 type Config struct {
 	ApolloURL string `json:"APOLLO_URL"`
 
-	IsStub bool `json:"IS_STUB" cfgDefault:"true"`
+	IsStub bool `json:"APOLLO_IS_STUB" cfgDefault:"true"`
 }
 
 func NewClient(cfg Config) Client {
