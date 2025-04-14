@@ -76,6 +76,7 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 
 		number := max(1, numberOfMessages+numberOfVerbiage)
 
+		// big latency here
 		err = m.clients.Googledrive.SaveMessage(ctx, message.Name, number, message.Timestamp, message.Content)
 		if err != nil {
 			log.Println("failed to save message to drive: %w", err)
@@ -96,7 +97,9 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 		return fmt.Errorf("failed to add table: %w", err)
 	}
 
-	err = m.clients.Googledrive.SaveTable(ctx, time.Now(), table)
+	// big latency here and sync operation with mutex
+	// no need to go in the end of function
+	err = m.clients.Googledrive.SaveTable(ctx, time.Now().Format("04-15-02-01-2006"), table)
 	if err != nil {
 		return fmt.Errorf("failed to save table to drive: %w", err)
 	}
