@@ -24,9 +24,10 @@ services:
       context: ./backend/apollo
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend/apollo:/app
     networks:
       - app-network
-    restart: unless-stopped
   hermes:
     build:
       context: ./backend
@@ -46,3 +47,4 @@ networks:
 
 volumes:
   postgres_data:
+  apollo_data:
