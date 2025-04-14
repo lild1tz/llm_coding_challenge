@@ -92,6 +92,8 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 		return fmt.Errorf("failed to predict text message: %w", err)
 	}
 
+	table = m.fillTable(table)
+
 	err = m.clients.Postgres.AddTable(ctx, time.Now(), table)
 	if err != nil {
 		return fmt.Errorf("failed to add table: %w", err)
@@ -105,4 +107,14 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 	}
 
 	return nil
+}
+
+func (m *Manager) fillTable(table models.Table) models.Table {
+	for i, row := range table {
+		if row.Date == "" {
+			table[i].Date = time.Now().Format("02-01-2006")
+		}
+	}
+
+	return table
 }

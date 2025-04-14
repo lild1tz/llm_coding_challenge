@@ -37,6 +37,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      apollo:
+        condition: service_started
     networks:
       - app-network
     restart: unless-stopped
