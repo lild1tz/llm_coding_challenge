@@ -11,7 +11,7 @@ class TableRow(BaseModel):
     val_day: Union[int, float, None] = Field(None, description="Валовый сбор за день (в центнерах), если применимо")
     val_beginning: Union[int, float, None] = Field(None, description="Суммарный валовый сбор с начала операции (в центнерах), если применимо")
 
-class ProcessMessageOutput(BaseModel):
+class Table(BaseModel):
     table: List[TableRow]
 
 class InputMessage(BaseModel):
@@ -24,6 +24,3 @@ class ClassifyMessageOutput(BaseModel):
 class InputPhoto(BaseModel):
     photo: str = Field(..., description="Фотография в формате base64")
     type: Literal["png", "jpeg", "jpg"] = Field(..., description="Тип фотографии")
-
-class OcrResult(BaseModel):
-    text: str = Field(..., description="Текст, полученный из фотографии")
