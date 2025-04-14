@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/models"
@@ -36,6 +37,7 @@ func (m *Manager) AsyncProcessTextMessage(ctx context.Context, message models.Te
 }
 
 func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMessage) error {
+	// pre-processing (filter verbiage)
 	var err error
 
 	isVerbiage := false
@@ -76,8 +78,17 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 
 		number := max(1, numberOfMessages+numberOfVerbiage)
 
+		loc, err := time.LoadLocation("Europe/Moscow")
+		if err != nil {
+			log.Println("failed to load location: %w", err)
+		}
+
+		timestamp := message.Timestamp.In(loc)
+
+		fileName := fmt.Sprintf("%s_%d_%s.docx", strings.ReplaceAll(message.Name, " ", "-"), number, timestamp.Format("04м15ч02/01/2006"))
+
 		// big latency here
-		err = m.clients.Googledrive.SaveMessage(ctx, message.Name, number, message.Timestamp, message.Content)
+		err = m.clients.Googledrive.SaveMessage(ctx, fileName, message.Content)
 		if err != nil {
 			log.Println("failed to save message to drive: %w", err)
 		}
@@ -86,6 +97,8 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 	if isVerbiage {
 		return nil
 	}
+
+	// start processing
 
 	table, err := m.clients.Apollo.PredictTableFromText(ctx, message.Content)
 	if err != nil {
@@ -101,7 +114,7 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 
 	// big latency here and sync operation with mutex
 	// no need to go in the end of function
-	err = m.clients.Googledrive.SaveTable(ctx, time.Now().Format("04-15-02-01-2006"), table)
+	err = m.clients.Googledrive.SaveTable(ctx, time.Now().Format("15ч02/01/2006"), table)
 	if err != nil {
 		return fmt.Errorf("failed to save table to drive: %w", err)
 	}

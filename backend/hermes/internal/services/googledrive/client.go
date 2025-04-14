@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gomutex/godocx"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/models"
@@ -55,7 +53,7 @@ func (c *Client) Release() error {
 	return nil
 }
 
-func (c *Client) SaveMessage(ctx context.Context, name string, number int, timestamp time.Time, text string) error {
+func (c *Client) SaveMessage(ctx context.Context, fileName string, text string) error {
 	doc, err := godocx.NewDocument()
 	if err != nil {
 		return fmt.Errorf("failed to create document: %w", err)
@@ -72,15 +70,6 @@ func (c *Client) SaveMessage(ctx context.Context, name string, number int, times
 	if err != nil {
 		return fmt.Errorf("failed to write docx: %w", err)
 	}
-
-	loc, err := time.LoadLocation("Europe/Moscow")
-	if err != nil {
-		log.Println("failed to load location: %w", err)
-	}
-
-	timestamp = timestamp.In(loc)
-
-	fileName := fmt.Sprintf("%s_%d_%s.docx", strings.ReplaceAll(name, " ", "_"), number, timestamp.Format("04-15-02-01-2006"))
 
 	file := &drive.File{
 		Name:     fileName,
