@@ -165,3 +165,16 @@ def message_photo_prompt(dataurl: str):
         ])
     ]
     return message_photo_prompt
+
+def message_audio_prompt(base64_str: str, file_type: str):
+    messages = [
+        SystemMessage(content="Ты профессиональный транскрибатор аудио."),
+        HumanMessage(content=[
+            {"type": "text", "text": "Что содержится на этой аудиозаписи?"},
+            {"type": "input_audio", "input_audio": {
+                "data": base64_str,
+                "format": file_type
+            }},
+        ])
+    ]
+    return messages

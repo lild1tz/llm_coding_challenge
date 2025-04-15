@@ -1,4 +1,4 @@
-# Apollo: AI-Ассистент для Агрономов (LLM Coding Challenge - АгроПрогресс)
+# ```Apollo```: Мультимодальный AI-Ассистент для Агрономов (LLM Coding Challenge - АгроПрогресс)
 
 ![Apollo Banner](https://yandex.ru/images/search?from=tabbar&img_url=https%3A%2F%2Fcdn.quotesgram.com%2Fimg%2F71%2F50%2F97584996-XHA1_039.jpg&lr=45&pos=1&rpt=simage&text=Apollo%20picture) 
 

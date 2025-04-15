@@ -1,44 +1,43 @@
 from fastapi import FastAPI
 from app.utils import get_embedding, base64_to_dataurl
-from app.prompts import fewshot_text_prompt, message_photo_prompt
+from app.prompts import fewshot_text_prompt, message_photo_prompt, message_audio_prompt
 from app.models import Table, ClassifyMessageOutput, InputMessage, InputPhoto, InputAudio, OutputAudio
 from app.config import Config
 from langchain_openai import ChatOpenAI
 from transformers import AutoTokenizer, AutoConfig
 import onnxruntime as ort
 from joblib import load
-from dotenv import load_dotenv
+from openai import AsyncOpenAI
 from pathlib import Path
+import base64
+import tempfile
 import warnings
-
 warnings.filterwarnings("ignore")
+
 config = Config()
 
 app = FastAPI()
-print(config.OPENAI_MODEL, config.OPENAI_API_KEY, config.OPENAI_BASE_URL)
 
 llm = ChatOpenAI(
-   model=config.OPENAI_MODEL,
+   model_name=config.OPENAI_MODEL,
    openai_api_key=config.OPENAI_API_KEY,
    base_url=config.OPENAI_BASE_URL,
-#    temperature=0,
+    temperature=0,
    max_tokens=10240
 ).with_structured_output(Table)
 
-transcriber = ChatOpenAI(
-    model=config.TRANSCRIBER_MODEL,
-    openai_api_key= config.OPENAI_API_KEY,
-    base_url=config.OPENAI_BASE_URL
+transcriber = AsyncOpenAI(
+    api_key=config.OPENAI_API_KEY,
+    base_url=config.OPENAI_BASE_URL 
 )
-
 
 base_dir = Path(__file__).resolve().parent
 onnx_model_path = base_dir / "source" / "onnx_model" / "model.onnx"
 tokenizer_dir = base_dir / "source" / "onnx_model"
 logreg_model_path = base_dir / "source" / "logreg_model.joblib"
 session = ort.InferenceSession(onnx_model_path.as_posix())
-config = AutoConfig.from_pretrained(tokenizer_dir.as_posix(), local_files_only=True)
-tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir.as_posix(), config=config, local_files_only=True)
+tokenizer_config = AutoConfig.from_pretrained(tokenizer_dir.as_posix(), local_files_only=True)
+tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir.as_posix(), config=tokenizer_config, local_files_only=True)
 clf = load(logreg_model_path)
 
 @app.post("/process_message")
@@ -69,11 +68,20 @@ async def process_photo(input: InputPhoto) -> Table:
 @app.post("/transcribe_audio")
 async def transcribe_audio(input: InputAudio) -> OutputAudio:
     base64_str = input.audio
-    file_type = input.type
-    dataurl = base64_to_dataurl(base64_str, file_type)
-    prompt = transcriber.invoke(dataurl)
-    return OutputAudio(text=prompt)
-    
+    file_type = input.type.lower()
+    audio_data = base64.b64decode(base64_str)
+
+    with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as temp_audio_file:
+        temp_audio_file.write(audio_data)
+        temp_audio_file_path = temp_audio_file.name
+
+    with open(temp_audio_file_path, "rb") as audio_file:
+        transcription = await transcriber.audio.transcriptions.create(
+            model=config.TRANSCRIBER_MODEL,
+            file=audio_file
+        )
+    return OutputAudio(text=transcription.text)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
