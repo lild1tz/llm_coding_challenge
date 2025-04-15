@@ -1,0 +1,1 @@
+ALTER TABLE hermes_data.chat DROP COLUMN chat_type;

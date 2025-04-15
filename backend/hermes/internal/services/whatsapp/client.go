@@ -8,8 +8,11 @@ import (
 
 	"github.com/mdp/qrterminal"
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
+	"go.mau.fi/whatsmeow/types"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"google.golang.org/protobuf/proto"
 )
 
 type Config struct {
@@ -67,6 +70,22 @@ func (c *Client) Start() error {
 		if err != nil {
 			return fmt.Errorf("failed to connect: %w", err)
 		}
+	}
+
+	return nil
+}
+
+func (c *Client) SendReport(ctx context.Context, chatID string, listenerID int, url string) error {
+	jid, err := types.ParseJID(chatID)
+	if err != nil {
+		return fmt.Errorf("failed to parse JID: %w", err)
+	}
+
+	_, err = c.Client.SendMessage(ctx, jid, &waE2E.Message{
+		Conversation: proto.String(url),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to send WhatsApp message: %w", err)
 	}
 
 	return nil

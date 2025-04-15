@@ -30,11 +30,3 @@ CREATE TABLE hermes_data.images (
     PRIMARY KEY (id),
     FOREIGN KEY (message_id) REFERENCES hermes_data.messages
 );
-
-CREATE TABLE hermes_data.chats (
-    id SERIAL,
-    type VARCHAR(1023) NOT NULL,
-    chat_id VARCHAR(1023) NOT NULL UNIQUE,
-    
-    PRIMARY KEY (id)
-);

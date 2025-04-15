@@ -122,15 +122,15 @@ func (c *Client) GetWorkerIDByTelegramID(ctx context.Context, telegramID string)
 	return workerID, nil
 }
 
-func (c *Client) GetNumberOfMessages(ctx context.Context, workerID int, timestamp time.Time) (int, error) {
+func (c *Client) GetNumberOfMessages(ctx context.Context, workerID int, startedAt, createdAt time.Time) (int, error) {
 	query := `
 	SELECT COUNT(*) 
 	FROM hermes_data.messages 
-	WHERE worker_id = $1 AND created_at <= $2;
+	WHERE worker_id = $1 AND created_at BETWEEN $2 AND $3;
 	`
 
 	var numberOfMessages int
-	err := c.QueryRow(ctx, query, workerID, timestamp).Scan(&numberOfMessages)
+	err := c.QueryRow(ctx, query, workerID, startedAt, createdAt).Scan(&numberOfMessages)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get message count: %w", err)
 	}
@@ -138,15 +138,15 @@ func (c *Client) GetNumberOfMessages(ctx context.Context, workerID int, timestam
 	return numberOfMessages, nil
 }
 
-func (c *Client) GetNumberOfVerbiage(ctx context.Context, workerID int, timestamp time.Time) (int, error) {
+func (c *Client) GetNumberOfVerbiage(ctx context.Context, workerID int, startedAt, createdAt time.Time) (int, error) {
 	query := `
 	SELECT COUNT(*) 
 	FROM hermes_data.verbiage 
-	WHERE worker_id = $1 AND created_at <= $2;
+	WHERE worker_id = $1 AND created_at BETWEEN $2 AND $3;
 	`
 
 	var numberOfVerbiage int
-	err := c.QueryRow(ctx, query, workerID, timestamp).Scan(&numberOfVerbiage)
+	err := c.QueryRow(ctx, query, workerID, startedAt, createdAt).Scan(&numberOfVerbiage)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get verbiage count: %w", err)
 	}
@@ -204,4 +204,94 @@ func (c *Client) AddTableLine(ctx context.Context, createdAt time.Time, line mod
 	}
 
 	return nil
+}
+
+func (c *Client) CreateReport(ctx context.Context, chatID int, timestamp time.Time) error {
+	query := `
+	INSERT INTO hermes_data.report (chat_id, started_at, last_updated_at)
+	VALUES ($1, $2, $2);
+	`
+
+	_, err := c.Exec(ctx, query, chatID, timestamp)
+	if err != nil {
+		return fmt.Errorf("failed to create report: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Client) UpdateReport(ctx context.Context, chatID string, timestamp time.Time) error {
+	query := `
+	UPDATE hermes_data.report
+	SET last_updated_at = $1
+	WHERE chat_id in (SELECT id FROM hermes_data.chat WHERE chat_name = $2);
+	`
+
+	_, err := c.Exec(ctx, query, timestamp, chatID)
+	if err != nil {
+		return fmt.Errorf("failed to update report: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Client) FinishReport(ctx context.Context, chatID string, timestamp time.Time) error {
+	query := `
+	WITH chat AS (
+		SELECT id, listener_id FROM hermes_data.chat WHERE chat_name = $2
+	)
+	UPDATE hermes_data.report
+	SET finished_at = $1
+	WHERE chat_id in (SELECT id FROM chat);
+	`
+
+	_, err := c.Exec(ctx, query, timestamp, chatID)
+	if err != nil {
+		return fmt.Errorf("failed to finish report: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Client) GetChat(ctx context.Context, chatID string) (int, string, error) {
+	query := `
+	SELECT listener_id, chat_type FROM hermes_data.chat WHERE chat_name = $1;
+	`
+
+	var listenerID int
+	var chatType string
+	err := c.QueryRow(ctx, query, chatID).Scan(&listenerID, &chatType)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to get chat: %w", err)
+	}
+
+	return listenerID, chatType, nil
+}
+
+func (c *Client) GetChatID(ctx context.Context, chatName string) (int, error) {
+	query := `
+	SELECT id FROM hermes_data.chat WHERE chat_name = $1;
+	`
+
+	var chatID int
+	err := c.QueryRow(ctx, query, chatName).Scan(&chatID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get chat ID: %w", err)
+	}
+
+	return chatID, nil
+}
+
+func (c *Client) FindChat(ctx context.Context, chatID string) (bool, error) {
+	query := `
+	SELECT EXISTS (SELECT 1 FROM hermes_data.chat WHERE chat_name = $1);
+	`
+
+	var exists bool
+	err := c.QueryRow(ctx, query, chatID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to find chat: %w", err)
+	}
+
+	return exists, nil
 }

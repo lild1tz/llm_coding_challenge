@@ -53,6 +53,15 @@ func (c *Client) Release() error {
 	return nil
 }
 
+func (c *Client) GetTableURL(ctx context.Context, name string) (string, error) {
+	fileID, err := c.findFileInFolder(name)
+	if err != nil {
+		return "", fmt.Errorf("find file: %w", err)
+	}
+
+	return fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/edit?usp=sharing", fileID), nil
+}
+
 func (c *Client) SaveMessage(ctx context.Context, fileName string, text string) error {
 	doc, err := godocx.NewDocument()
 	if err != nil {

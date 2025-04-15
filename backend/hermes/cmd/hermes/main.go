@@ -38,7 +38,7 @@ func main() {
 
 	defer clients.Release()
 
-	manager := recognizer.NewManager(clients, cfg.Recognizer)
+	manager := recognizer.NewManager(ctx, clients, cfg.Recognizer)
 
 	clients.Whatsapp.AddEventHandler(func(evt interface{}) {
 		if ctx.Err() != nil {
@@ -49,9 +49,21 @@ func main() {
 		case *events.Message:
 			msg := v.Message
 			whatsappID := v.Info.Sender.String()
-			// chat := v.Info.Chat.String() TODO: filter by chat
+			chatID := v.Info.Chat.String() // TODO: filter by chat
+			fmt.Println("chatID", chatID)
+			fmt.Println("whatsappID", whatsappID)
 			pushName := v.Info.PushName
 			timestamp := v.Info.Timestamp
+
+			found, err := clients.Postgres.FindChat(ctx, chatID)
+			if err != nil {
+				log.Fatalf("failed to find chat: %v", err)
+			}
+
+			if !found {
+				log.Printf("chat refused: %s", chatID)
+				return
+			}
 
 			if msg.Conversation != nil {
 				content := msg.GetConversation()
@@ -63,6 +75,7 @@ func main() {
 					models.TextMessage{
 						WhatsappID: &whatsappID,
 						TelegramID: nil,
+						ChatID:     chatID,
 						Name:       pushName,
 						Timestamp:  timestamp,
 						Content:    content,
@@ -75,6 +88,25 @@ func main() {
 				// go func() {
 				// 	err := manager.ProcessImageMessage(ctx, sender, pushName, timestamp, msg.ImageMessage)
 				// }()
+			} else if msg.AudioMessage != nil {
+				// Generate a unique filename (e.g., timestamp)
+				filename := fmt.Sprintf("audio_%d.oga", time.Now().Unix())
+
+				// Download the audio data
+				audioData, err := clients.Whatsapp.Download(msg.AudioMessage)
+				if err != nil {
+					fmt.Printf("Failed to download audio: %v\n", err)
+					return
+				}
+
+				// Save to a file
+				err = os.WriteFile(filename, audioData, 0644)
+				if err != nil {
+					fmt.Printf("Failed to save audio: %v\n", err)
+					return
+				}
+
+				fmt.Printf("Saved audio to %s\n", filename)
 			}
 		}
 	})
