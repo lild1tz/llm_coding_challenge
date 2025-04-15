@@ -173,3 +173,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+benchmark_testing.xlsx
+/benchmark_result/*
+/benchmark_result/.DS_Store
