@@ -31,6 +31,7 @@ require (
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/fumiama/go-docx v0.0.0-20241231153056-9f8f327c74a5
+	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
 	github.com/gomutex/godocx v0.1.5
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect

@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/managers/recognizer"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/models"
@@ -49,19 +50,19 @@ func main() {
 		case *events.Message:
 			msg := v.Message
 			whatsappID := v.Info.Sender.String()
-			chatID := v.Info.Chat.String() // TODO: filter by chat
-			fmt.Println("chatID", chatID)
+			chatName := v.Info.Chat.String() // TODO: filter by chat
+			fmt.Println("chatID", chatName)
 			fmt.Println("whatsappID", whatsappID)
 			pushName := v.Info.PushName
 			timestamp := v.Info.Timestamp
 
-			found, err := clients.Postgres.FindChat(ctx, chatID)
+			found, err := clients.Postgres.FindChat(ctx, chatName)
 			if err != nil {
 				log.Fatalf("failed to find chat: %v", err)
 			}
 
 			if !found {
-				log.Printf("chat refused: %s", chatID)
+				log.Printf("chat refused: %s", chatName)
 				return
 			}
 
@@ -75,7 +76,7 @@ func main() {
 					models.TextMessage{
 						WhatsappID: &whatsappID,
 						TelegramID: nil,
-						ChatID:     chatID,
+						ChatName:   chatName,
 						Name:       pushName,
 						Timestamp:  timestamp,
 						Content:    content,
@@ -110,7 +111,48 @@ func main() {
 			}
 		}
 	})
+
+	clients.Telegram.AddHandler("text", func(ctx context.Context, update tgbotapi.Update) error {
+		if update.Message != nil && update.Message.Text != "" {
+			telegramID := models.GetTelegramID(update)
+			chatName := models.GetTelegramChatName(update)
+			content := models.GetTelegramContent(update)
+			timestamp := models.GetTelegramTimestamp(update)
+			name := models.GetTelegramName(update)
+
+			fmt.Println("chatName", chatName)
+			fmt.Println("telegramID", telegramID)
+			fmt.Println("name", name)
+			fmt.Println("content", content)
+			fmt.Println("timestamp", timestamp)
+
+			found, err := clients.Postgres.FindChat(ctx, chatName)
+			if err != nil {
+				log.Fatalf("failed to find chat: %v", err)
+			}
+
+			if !found {
+				log.Printf("chat refused: %s", chatName)
+				return nil
+			}
+
+			go manager.AsyncProcessTextMessage(
+				ctx,
+				models.TextMessage{
+					TelegramID: &telegramID,
+					ChatName:   chatName,
+					Content:    content,
+					Timestamp:  timestamp,
+					Name:       name,
+				},
+			)
+		}
+
+		return nil
+	})
+
 	clients.Whatsapp.Connect()
+	go clients.Telegram.Start(ctx)
 
 	// Listen to Ctrl+C (you can also do something else that prevents the program from exiting)
 	c := make(chan os.Signal, 1)

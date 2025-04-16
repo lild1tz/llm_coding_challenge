@@ -4,8 +4,6 @@ WORKDIR /app
 
 RUN go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
-COPY hermes/migrations hermes/migrations
-
 COPY go.work ./
 COPY libs/go.mod ./libs/
 COPY hermes/go.mod ./hermes/

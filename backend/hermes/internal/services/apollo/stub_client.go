@@ -10,6 +10,10 @@ import (
 type stubClient struct {
 }
 
+func (c *stubClient) Release() error {
+	return nil
+}
+
 func (c *stubClient) PredictTableFromText(ctx context.Context, text string) (models.Table, error) {
 	return models.Table{
 		{

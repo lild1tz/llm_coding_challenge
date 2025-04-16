@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -161,7 +163,6 @@ func (c *Client) addHeaders(spreadsheetID string) error {
 
 func (c *Client) appendData(spreadsheetID string, table models.Table) error {
 	values := make([][]interface{}, len(table))
-
 	for i, row := range table {
 		values[i] = []interface{}{
 			row.Date,
@@ -175,13 +176,126 @@ func (c *Client) appendData(spreadsheetID string, table models.Table) error {
 		}
 	}
 
-	vr := &sheets.ValueRange{
-		Values: values,
-	}
+	vr := &sheets.ValueRange{Values: values}
 
-	_, err := c.Sheets.Spreadsheets.Values.Append(spreadsheetID, "Sheet1!A1", vr).
+	response, err := c.Sheets.Spreadsheets.Values.Append(spreadsheetID, "Sheet1!A1", vr).
 		ValueInputOption("RAW").
 		InsertDataOption("INSERT_ROWS").
 		Do()
-	return err
+	if err != nil {
+		return err
+	}
+
+	sheetName := "Sheet1"
+	sheetId, err := c.getSheetID(spreadsheetID, sheetName)
+	if err != nil {
+		return err
+	}
+
+	updatedRange := response.Updates.UpdatedRange
+	parts := strings.Split(updatedRange, "!")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid updated range: %s", updatedRange)
+	}
+	rangePart := parts[1]
+	rangeParts := strings.Split(rangePart, ":")
+	if len(rangeParts) != 2 {
+		return fmt.Errorf("invalid range part: %s", rangePart)
+	}
+	startCell, endCell := rangeParts[0], rangeParts[1]
+
+	startRow, err := parseRowNumber(startCell)
+	if err != nil {
+		return err
+	}
+	endRow, err := parseRowNumber(endCell)
+	if err != nil {
+		return err
+	}
+
+	if endRow-startRow+1 != len(table) {
+		return fmt.Errorf("mismatch between added rows and table length")
+	}
+
+	requests := []*sheets.Request{}
+	for i := range table {
+		row := table[i]
+		rowNumber := startRow + i
+
+		if row.DivisionYellow {
+			gridRange := createGridRange(sheetId, rowNumber, 1) // Column B
+			requests = append(requests, createUpdateCellRequest(gridRange))
+		}
+		if row.OperationYellow {
+			gridRange := createGridRange(sheetId, rowNumber, 2) // Column C
+			requests = append(requests, createUpdateCellRequest(gridRange))
+		}
+		if row.CultureYellow {
+			gridRange := createGridRange(sheetId, rowNumber, 3) // Column D
+			requests = append(requests, createUpdateCellRequest(gridRange))
+		}
+	}
+
+	if len(requests) > 0 {
+		batchReq := &sheets.BatchUpdateSpreadsheetRequest{Requests: requests}
+		_, err = c.Sheets.Spreadsheets.BatchUpdate(spreadsheetID, batchReq).Do()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) getSheetID(spreadsheetID, sheetName string) (int64, error) {
+	resp, err := c.Sheets.Spreadsheets.Get(spreadsheetID).Do()
+	if err != nil {
+		return 0, err
+	}
+
+	for _, sheet := range resp.Sheets {
+		if sheet.Properties.Title == sheetName {
+			return sheet.Properties.SheetId, nil
+		}
+	}
+	return 0, fmt.Errorf("sheet %s not found", sheetName)
+}
+
+func parseRowNumber(cell string) (int, error) {
+	re := regexp.MustCompile(`[A-Za-z]+(\d+)`)
+	matches := re.FindStringSubmatch(cell)
+	if len(matches) != 2 {
+		return 0, fmt.Errorf("invalid cell address: %s", cell)
+	}
+	return strconv.Atoi(matches[1])
+}
+
+func createGridRange(sheetId int64, rowNumber, columnIndex int) *sheets.GridRange {
+	return &sheets.GridRange{
+		SheetId:          sheetId,
+		StartRowIndex:    int64(rowNumber - 1),
+		EndRowIndex:      int64(rowNumber),
+		StartColumnIndex: int64(columnIndex),
+		EndColumnIndex:   int64(columnIndex + 1),
+	}
+}
+
+func createUpdateCellRequest(gridRange *sheets.GridRange) *sheets.Request {
+	return &sheets.Request{
+		UpdateCells: &sheets.UpdateCellsRequest{
+			Range:  gridRange,
+			Fields: "userEnteredFormat.backgroundColor",
+			Rows: []*sheets.RowData{
+				{
+					Values: []*sheets.CellData{
+						{
+							UserEnteredFormat: &sheets.CellFormat{
+								BackgroundColor: &sheets.Color{Red: 1.0, Green: 1.0, Blue: 0.0},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 }

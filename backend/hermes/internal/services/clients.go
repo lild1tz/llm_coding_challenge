@@ -1,11 +1,13 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/apollo"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/googledrive"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/postgres"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/telegram"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/whatsapp"
 )
 
@@ -14,6 +16,7 @@ type Config struct {
 	Whatsapp    whatsapp.Config
 	Googledrive googledrive.Config
 	Apollo      apollo.Config
+	Telegram    telegram.Config
 }
 
 func NewClients(cfg Config) (*Clients, error) {
@@ -43,11 +46,17 @@ func NewClients(cfg Config) (*Clients, error) {
 		return nil, fmt.Errorf("failed to create apollo client: %w", err)
 	}
 
+	telegramClient, err := telegram.NewClient(cfg.Telegram)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create telegram client: %w", err)
+	}
+
 	return &Clients{
 		Postgres:    postgresClient,
 		Whatsapp:    whatsappClient,
 		Googledrive: googledriveClient,
 		Apollo:      apolloClient,
+		Telegram:    telegramClient,
 	}, nil
 }
 
@@ -56,8 +65,36 @@ type Clients struct {
 	Whatsapp    *whatsapp.Client
 	Googledrive *googledrive.Client
 	Apollo      apollo.Client
+	Telegram    *telegram.Client
 }
 
 func (c *Clients) Release() error {
-	return c.Postgres.Release()
+	var errs []error
+
+	err := c.Postgres.Release()
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	err = c.Whatsapp.Release()
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	err = c.Telegram.Release()
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	err = c.Googledrive.Release()
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	err = c.Apollo.Release()
+	if err != nil {
+		errs = append(errs, err)
+	}
+
+	return errors.Join(errs...)
 }

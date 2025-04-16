@@ -5,7 +5,7 @@ import "time"
 type TextMessage struct {
 	WhatsappID *string
 	TelegramID *string
-	ChatID     string
+	ChatName   string
 	Name       string
 
 	Timestamp time.Time
