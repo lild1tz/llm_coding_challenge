@@ -50,3 +50,4 @@ networks:
 volumes:
   postgres_data:
   apollo_data:
+  superset_home:
