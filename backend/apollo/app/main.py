@@ -1,44 +1,50 @@
 from fastapi import FastAPI
-from app.utils import get_embedding, ocr_photo
-from app.prompts import fewshot_prompt
-from app.models import ProcessMessageOutput, ClassifyMessageOutput, InputMessage, InputPhoto, OcrResult
+from app.utils import get_embedding, base64_to_dataurl
+from app.prompts import fewshot_text_prompt, message_photo_prompt, message_audio_prompt
+from app.models import Table, ClassifyMessageOutput, InputMessage, InputPhoto, InputAudio, OutputAudio
 from app.config import Config
 from langchain_openai import ChatOpenAI
-from mistralai import Mistral
 from transformers import AutoTokenizer, AutoConfig
 import onnxruntime as ort
 from joblib import load
+from openai import AsyncOpenAI
 from pathlib import Path
 import base64
+import tempfile
 import warnings
 warnings.filterwarnings("ignore")
+
+config = Config()
 
 app = FastAPI()
 
 llm = ChatOpenAI(
+   model_name=config.OPENAI_MODEL,
+   openai_api_key=config.OPENAI_API_KEY,
+   base_url=config.OPENAI_BASE_URL,
     temperature=0,
-    max_tokens=10000,
-    model_name=Config.OPENAI_MODEL,
-    openai_api_key=Config.OPENAI_API_KEY,
-    base_url=Config.OPENAI_BASE_URL
-).with_structured_output(ProcessMessageOutput)
+   max_tokens=10240
+).with_structured_output(Table)
 
-ocr = Mistral(api_key=Config.MISTRAL_API_KEY)
+transcriber = AsyncOpenAI(
+    api_key=config.OPENAI_API_KEY,
+    base_url=config.OPENAI_BASE_URL 
+)
 
 base_dir = Path(__file__).resolve().parent
 onnx_model_path = base_dir / "source" / "onnx_model" / "model.onnx"
 tokenizer_dir = base_dir / "source" / "onnx_model"
 logreg_model_path = base_dir / "source" / "logreg_model.joblib"
 session = ort.InferenceSession(onnx_model_path.as_posix())
-config = AutoConfig.from_pretrained(tokenizer_dir.as_posix(), local_files_only=True)
-tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir.as_posix(), config=config, local_files_only=True)
+tokenizer_config = AutoConfig.from_pretrained(tokenizer_dir.as_posix(), local_files_only=True)
+tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir.as_posix(), config=tokenizer_config, local_files_only=True)
 clf = load(logreg_model_path)
 
 @app.post("/process_message")
-async def process_message(input: InputMessage) -> ProcessMessageOutput:
+async def process_message(input: InputMessage) -> Table:
     massage = input.message
-    prompt = fewshot_prompt.format_prompt(input=massage)
-    table = await llm.ainvoke(prompt)
+    prompt = fewshot_text_prompt.format_prompt(input=massage)
+    table = await llm.ainvoke(prompt) #
     return table
 
 @app.post("/classify_message")
@@ -51,13 +57,36 @@ async def classify_message(input: InputMessage) -> ClassifyMessageOutput:
     return ClassifyMessageOutput(probability=probability, prediction=predicted_class)
 
 @app.post("/process_photo")
-async def process_photo(input: InputPhoto) -> OcrResult:
-    pass
+async def process_photo(input: InputPhoto) -> Table:
+    base64_str = input.photo
+    file_type = input.type
+    dataurl = base64_to_dataurl(base64_str, file_type)
+    prompt = message_photo_prompt(dataurl)
+    table = await llm.ainvoke(prompt) 
+    return table
+   
+@app.post("/transcribe_audio")
+async def transcribe_audio(input: InputAudio) -> OutputAudio:
+    base64_str = input.audio
+    file_type = input.type.lower()
+    audio_data = base64.b64decode(base64_str)
 
+    with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as temp_audio_file:
+        temp_audio_file.write(audio_data)
+        temp_audio_file_path = temp_audio_file.name
+
+    with open(temp_audio_file_path, "rb") as audio_file:
+        transcription = await transcriber.audio.transcriptions.create(
+            model=config.TRANSCRIBER_MODEL,
+            file=audio_file
+        )
+    return OutputAudio(text=transcription.text)
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
     #uvicorn app.main:app --reload
+
+
 
 
