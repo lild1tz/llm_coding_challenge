@@ -6,6 +6,7 @@ import (
 
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/apollo"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/googledrive"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/minio"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/postgres"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/telegram"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/whatsapp"
@@ -17,6 +18,7 @@ type Config struct {
 	Googledrive googledrive.Config
 	Apollo      apollo.Config
 	Telegram    telegram.Config
+	Minio       minio.Config
 }
 
 func NewClients(cfg Config) (*Clients, error) {
@@ -51,12 +53,18 @@ func NewClients(cfg Config) (*Clients, error) {
 		return nil, fmt.Errorf("failed to create telegram client: %w", err)
 	}
 
+	minioClient, err := minio.NewClient(cfg.Minio)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create minio client: %w", err)
+	}
+
 	return &Clients{
 		Postgres:    postgresClient,
 		Whatsapp:    whatsappClient,
 		Googledrive: googledriveClient,
 		Apollo:      apolloClient,
 		Telegram:    telegramClient,
+		Minio:       minioClient,
 	}, nil
 }
 
@@ -66,6 +74,7 @@ type Clients struct {
 	Googledrive *googledrive.Client
 	Apollo      apollo.Client
 	Telegram    *telegram.Client
+	Minio       *minio.Client
 }
 
 func (c *Clients) Release() error {

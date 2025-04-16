@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/models"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services"
 )
@@ -64,7 +65,7 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 
 	isVerbiage := false
 	if m.filterVerbiage {
-		isVerbiage, err = m.clients.Apollo.CheckVerbiage(ctx, message.Content)
+		isVerbiage, err = m.clients.Apollo.CheckVerbiage(ctx, message.Text)
 		if err != nil {
 			log.Printf("failed to check is verbiage: %v", err)
 		}
@@ -91,12 +92,13 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 
 	var messageID int
 	if isVerbiage {
-		err = m.clients.Postgres.AddVerbiage(ctx, workerID, chatID, message.Timestamp, message.Content)
+		log.Println("verbiage message founded")
+		err = m.clients.Postgres.AddVerbiage(ctx, workerID, chatID, message.Timestamp, message.Text)
 		if err != nil {
 			return fmt.Errorf("failed to add Verbiage: %w", err)
 		}
 	} else {
-		messageID, err = m.clients.Postgres.AddMessage(ctx, workerID, chatID, message.Timestamp, message.Content, "user")
+		messageID, err = m.clients.Postgres.AddMessage(ctx, workerID, chatID, message.Timestamp, message.Text, "user")
 		if err != nil {
 			return fmt.Errorf("failed to add message: %w", err)
 		}
@@ -127,7 +129,7 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 		number := max(1, totalNumberOfMessages+totalNumberOfVerbiage)
 
 		// big latency here
-		err = m.clients.Googledrive.SaveMessage(ctx, models.GetDocxName(message.Name, number, message.Timestamp, chatContextName), message.Content)
+		err = m.clients.Googledrive.SaveMessage(ctx, models.GetDocxName(message.Name, number, message.Timestamp, chatContextName), message.Text)
 		if err != nil {
 			log.Println("failed to save message to drive: %w", err)
 		}
@@ -135,7 +137,7 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 
 	// start processing
 
-	table, err := m.clients.Apollo.PredictTableFromText(ctx, message.Content)
+	table, err := m.clients.Apollo.PredictTableFromText(ctx, message.Text)
 	if err != nil {
 		return fmt.Errorf("failed to predict text message: %w", err)
 	}
@@ -369,4 +371,104 @@ func (m *Manager) fillTable(ctx context.Context, table models.Table) models.Tabl
 	}
 
 	return table
+}
+
+func (m *Manager) AsyncProcessImageMessage(ctx context.Context, message models.ImageMessage) {
+	err := m.ProcessImageMessage(ctx, message)
+	if err != nil {
+		log.Printf("failed to process image message: %v", err)
+	}
+}
+
+func (m *Manager) ProcessImageMessage(ctx context.Context, message models.ImageMessage) error {
+	log.Println("pre-processing image message")
+
+	workerID, err := m.GetWorkerID(ctx, message.TextMessage)
+	if err != nil {
+		return fmt.Errorf("failed to get worker ID: %w", err)
+	}
+
+	chatID, chatContextID, err := m.clients.Postgres.GetChatInfo(ctx, message.ChatName)
+	if err != nil {
+		return fmt.Errorf("failed to get chat ID: %w", err)
+	}
+
+	chatContextName, err := m.clients.Postgres.GetChatContextName(ctx, chatContextID)
+	if err != nil {
+		return fmt.Errorf("failed to get chat context name: %w", err)
+	}
+
+	if !m.addChatContextName {
+		chatContextName = ""
+	}
+
+	messageID, err := m.clients.Postgres.AddMessage(ctx, workerID, chatID, message.Timestamp, message.Text, "user")
+	if err != nil {
+		return fmt.Errorf("failed to add message: %w", err)
+	}
+
+	startedAt := m.RegisterReport(ctx, chatContextID, chatContextName, message.Timestamp)
+
+	go func() {
+		chatIDs, err := m.clients.Postgres.GetChats(ctx, chatContextID)
+		if err != nil {
+			log.Println("failed to get chats: %w", err)
+		}
+
+		totalNumberOfMessages, err := m.clients.Postgres.GetNumberOfMessagesByChatIDs(ctx, workerID, chatIDs, startedAt, message.Timestamp)
+		if err != nil {
+			log.Println("failed to get number of messages: %w", err)
+		}
+
+		totalNumberOfVerbiage, err := m.clients.Postgres.GetNumberOfVerbiageByChatIDs(ctx, workerID, chatIDs, startedAt, message.Timestamp)
+		if err != nil {
+			log.Println("failed to get number of verbiage: %w", err)
+		}
+
+		number := max(1, totalNumberOfMessages+totalNumberOfVerbiage)
+
+		mime := mimetype.Detect(message.Image)
+		postfix := mime.Extension()
+
+		url, err := m.clients.Minio.UploadFile(ctx, models.GetImageName(message.Name, number, message.Timestamp, chatContextName, postfix), message.Image)
+		if err != nil {
+			log.Println("failed to upload image to minio: %w", err)
+		}
+
+		if url != "" {
+			err = m.clients.Postgres.AddImage(ctx, messageID, url)
+			if err != nil {
+				log.Println("failed to add image: %w", err)
+			}
+		}
+
+		// big latency here
+		err = m.clients.Googledrive.SaveImage(ctx, models.GetImageName(message.Name, number, message.Timestamp, chatContextName, postfix), message.Image)
+		if err != nil {
+			log.Println("failed to save image to drive: %w", err)
+		}
+	}()
+
+	log.Println("predicting image message")
+
+	table, err := m.clients.Apollo.PredictTableFromImage(ctx, message.Image)
+	if err != nil {
+		return fmt.Errorf("failed to predict image message: %w", err)
+	}
+
+	table = m.fillTable(ctx, table)
+
+	err = m.clients.Postgres.AddTable(ctx, messageID, time.Now(), table)
+	if err != nil {
+		return fmt.Errorf("failed to add table: %w", err)
+	}
+
+	// big latency here and sync operation with mutex
+	// no need to go in the end of function
+	err = m.clients.Googledrive.SaveTable(ctx, models.GetTableName(startedAt, chatContextName), table)
+	if err != nil {
+		return fmt.Errorf("failed to save table to drive: %w", err)
+	}
+
+	return nil
 }

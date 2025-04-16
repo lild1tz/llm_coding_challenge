@@ -2,13 +2,17 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/gabriel-vasile/mimetype"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/managers/recognizer"
@@ -50,7 +54,7 @@ func main() {
 		case *events.Message:
 			msg := v.Message
 			whatsappID := v.Info.Sender.String()
-			chatName := v.Info.Chat.String() // TODO: filter by chat
+			chatName := v.Info.Chat.String()
 			fmt.Println("chatID", chatName)
 			fmt.Println("whatsappID", whatsappID)
 			pushName := v.Info.PushName
@@ -58,7 +62,8 @@ func main() {
 
 			found, err := clients.Postgres.FindChat(ctx, chatName)
 			if err != nil {
-				log.Fatalf("failed to find chat: %v", err)
+				log.Printf("failed to find chat: %v", err)
+				return
 			}
 
 			if !found {
@@ -79,13 +84,36 @@ func main() {
 						ChatName:   chatName,
 						Name:       pushName,
 						Timestamp:  timestamp,
-						Content:    content,
+						Text:       content,
 					},
 				)
 			} else if msg.ImageMessage != nil {
 				fmt.Println("Тип: изображение")
 				fmt.Println("Текст:", msg.ImageMessage.GetURL())
 
+				data, err := clients.Whatsapp.Download(msg.GetImageMessage())
+				if err != nil {
+					log.Printf("failed to download image: %v", err)
+					return
+				}
+
+				// Определяем MIME-тип
+				mime := mimetype.Detect(data)
+				fmt.Printf("Detected MIME type: %s\n", mime.String())
+
+				// Кодируем в Base64
+				_ = base64.StdEncoding.EncodeToString(data)
+
+				go manager.AsyncProcessImageMessage(ctx, models.ImageMessage{
+					TextMessage: models.TextMessage{
+						WhatsappID: &whatsappID,
+						TelegramID: nil,
+						ChatName:   chatName,
+						Name:       pushName,
+						Timestamp:  timestamp,
+					},
+					Image: data,
+				})
 				// go func() {
 				// 	err := manager.ProcessImageMessage(ctx, sender, pushName, timestamp, msg.ImageMessage)
 				// }()
@@ -113,35 +141,81 @@ func main() {
 	})
 
 	clients.Telegram.AddHandler("text", func(ctx context.Context, update tgbotapi.Update) error {
-		if update.Message != nil && update.Message.Text != "" {
-			telegramID := models.GetTelegramID(update)
-			chatName := models.GetTelegramChatName(update)
-			content := models.GetTelegramContent(update)
-			timestamp := models.GetTelegramTimestamp(update)
-			name := models.GetTelegramName(update)
+		if update.Message == nil {
+			return nil
+		}
 
-			fmt.Println("chatName", chatName)
-			fmt.Println("telegramID", telegramID)
-			fmt.Println("name", name)
-			fmt.Println("content", content)
-			fmt.Println("timestamp", timestamp)
+		telegramID := models.GetTelegramID(update)
+		chatName := models.GetTelegramChatName(update)
+		content := models.GetTelegramContent(update)
+		timestamp := models.GetTelegramTimestamp(update)
+		name := models.GetTelegramName(update)
 
-			found, err := clients.Postgres.FindChat(ctx, chatName)
-			if err != nil {
-				log.Fatalf("failed to find chat: %v", err)
+		fmt.Println("chatName", chatName)
+		fmt.Println("telegramID", telegramID)
+		fmt.Println("name", name)
+		fmt.Println("content", content)
+		fmt.Println("timestamp", timestamp)
+
+		found, err := clients.Postgres.FindChat(ctx, chatName)
+		if err != nil {
+			log.Printf("failed to find chat: %v", err)
+			return nil
+		}
+
+		if !found {
+			log.Printf("chat refused: %s", chatName)
+			return nil
+		}
+
+		if update.Message.Photo != nil || update.Message.Document != nil {
+			var fileID string
+
+			if update.Message.Photo != nil {
+				photoSize := update.Message.Photo[len(update.Message.Photo)-1]
+				fileID = photoSize.FileID
+			} else if update.Message.Document != nil {
+				fileID = update.Message.Document.FileID
 			}
 
-			if !found {
-				log.Printf("chat refused: %s", chatName)
+			fileLink, err := clients.Telegram.Bot.GetFileDirectURL(fileID)
+			if err != nil {
+				log.Printf("Ошибка получения ссылки на файл: %v", err)
 				return nil
 			}
 
+			resp, err := http.Get(fileLink)
+			if err != nil {
+				log.Printf("Ошибка загрузки файла: %v", err)
+				return nil
+			}
+			defer resp.Body.Close()
+
+			data, err := io.ReadAll(resp.Body)
+			if err != nil {
+				log.Printf("Ошибка чтения данных: %v", err)
+				return nil
+			}
+
+			go manager.AsyncProcessImageMessage(ctx, models.ImageMessage{
+				TextMessage: models.TextMessage{
+					TelegramID: &telegramID,
+					ChatName:   chatName,
+					Text:       content,
+					Timestamp:  timestamp,
+					Name:       name,
+				},
+				Image: data,
+			})
+		}
+
+		if update.Message.Text != "" {
 			go manager.AsyncProcessTextMessage(
 				ctx,
 				models.TextMessage{
 					TelegramID: &telegramID,
 					ChatName:   chatName,
-					Content:    content,
+					Text:       content,
 					Timestamp:  timestamp,
 					Name:       name,
 				},

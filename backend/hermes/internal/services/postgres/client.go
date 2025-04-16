@@ -62,6 +62,20 @@ func (c *Client) AddMessage(ctx context.Context, workerID int, chatID int, times
 	return messageID, nil
 }
 
+func (c *Client) AddImage(ctx context.Context, messageID int, url string) error {
+	query := `
+	INSERT INTO hermes_data.images (message_id, image_url)
+	VALUES ($1, $2);
+	`
+
+	_, err := c.Exec(ctx, query, messageID, url)
+	if err != nil {
+		return fmt.Errorf("failed to insert image: %w", err)
+	}
+
+	return nil
+}
+
 func (c *Client) AddVerbiage(ctx context.Context, workerID int, chatID int, timestamp time.Time, text string) error {
 	query := `
 	INSERT INTO hermes_data.verbiage (worker_id, chat_id, created_at, content)
