@@ -337,7 +337,7 @@ func (m *Manager) notifyChats(ctx context.Context, chatContextID int, url string
 func (m *Manager) fillTable(ctx context.Context, table models.Table) models.Table {
 	for i, row := range table {
 		if row.Date == "" {
-			table[i].Date = time.Now().Format("02-01-2006")
+			table[i].Date = time.Now().Format("02.01.2006")
 		}
 
 		exists, err := m.clients.Postgres.CheckCulture(ctx, row.Culture)
