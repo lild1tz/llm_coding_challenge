@@ -43,7 +43,7 @@ func GetTableName(startedAt time.Time, chatContextName string) string {
 	return fileName
 }
 
-func GetDocxName(name string, number int, timestamp time.Time, chatContextName string) string {
+func GetBasicName(name string, number int, timestamp time.Time, chatContextName string) string {
 	loc, err := time.LoadLocation("Europe/Moscow")
 	if err != nil {
 		log.Println("failed to load location: %w", err)
@@ -57,5 +57,13 @@ func GetDocxName(name string, number int, timestamp time.Time, chatContextName s
 		fileName += "_" + chatContextName
 	}
 
-	return fileName + ".docx"
+	return fileName
+}
+
+func GetDocxName(name string, number int, timestamp time.Time, chatContextName string) string {
+	return GetBasicName(name, number, timestamp, chatContextName) + ".docx"
+}
+
+func GetImageName(name string, number int, timestamp time.Time, chatContextName string, postfix string) string {
+	return GetBasicName(name, number, timestamp, chatContextName) + postfix
 }

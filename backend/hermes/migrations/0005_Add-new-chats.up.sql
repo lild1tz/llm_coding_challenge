@@ -12,4 +12,3 @@ VALUES ('whatsapp', '120363398827953735@g.us', (SELECT id FROM hermes_data.chat_
 
 INSERT INTO hermes_data.listener (chat_id, worker_id, created_at)
 VALUES ((SELECT id FROM hermes_data.chat WHERE chat_name = '120363398827953735@g.us'), (SELECT id FROM hermes_data.worker WHERE name = 'тестовый работник'), NOW());
-

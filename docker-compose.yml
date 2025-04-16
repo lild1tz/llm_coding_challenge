@@ -19,6 +19,25 @@ services:
       timeout: 2s
     restart: unless-stopped
 
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: hermes
+      MINIO_ROOT_PASSWORD: password
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   apollo:
     build:
       context: ./backend/apollo
@@ -39,28 +58,30 @@ services:
         condition: service_healthy
       apollo:
         condition: service_started
+      minio:
+        condition: service_healthy
     networks:
       - app-network
     restart: unless-stopped
 
-  superset:
-    build:
-      context: ./backend/superset
-    ports:
-      - "8088:8088"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      - SUPERSET_ADMIN_USERNAME=admin
-      - SUPERSET_ADMIN_FIRSTNAME=Superset
-      - SUPERSET_ADMIN_LASTNAME=Admin
-      - SUPERSET_ADMIN_EMAIL=admin@superset.com
-      - SUPERSET_ADMIN_PASSWORD=admin
-    volumes:
-      - superset_home:/app/superset_home
-    networks:
-      - app-network
+  # superset:
+  #   build:
+  #     context: ./backend/superset
+  #   ports:
+  #     - "8088:8088"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     - SUPERSET_ADMIN_USERNAME=admin
+  #     - SUPERSET_ADMIN_FIRSTNAME=Superset
+  #     - SUPERSET_ADMIN_LASTNAME=Admin
+  #     - SUPERSET_ADMIN_EMAIL=admin@superset.com
+  #     - SUPERSET_ADMIN_PASSWORD=admin
+  #   volumes:
+  #     - superset_home:/app/superset_home
+  #   networks:
+  #     - app-network
 
 networks:
   app-network:
@@ -70,3 +91,4 @@ volumes:
   postgres_data:
   apollo_data:
   superset_home:
+  minio_data:

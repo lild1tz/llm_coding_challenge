@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/gomutex/godocx"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/models"
 	"golang.org/x/oauth2/google"
@@ -61,6 +62,10 @@ func (c *Client) GetTableURL(ctx context.Context, name string) (string, error) {
 		return "", fmt.Errorf("find file: %w", err)
 	}
 
+	if fileID == "" {
+		return "", fmt.Errorf("file not found")
+	}
+
 	return fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s/edit?usp=sharing", fileID), nil
 }
 
@@ -89,6 +94,23 @@ func (c *Client) SaveMessage(ctx context.Context, fileName string, text string) 
 	}
 
 	_, err = c.Drive.Files.Create(file).Media(&buf).Do()
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Client) SaveImage(ctx context.Context, fileName string, image []byte) error {
+	mime := mimetype.Detect(image)
+
+	file := &drive.File{
+		Name:     fileName,
+		Parents:  []string{c.folderID},
+		MimeType: mime.String(),
+	}
+
+	_, err := c.Drive.Files.Create(file).Media(bytes.NewReader(image)).Do()
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}

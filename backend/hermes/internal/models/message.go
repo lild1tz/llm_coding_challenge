@@ -1,6 +1,8 @@
 package models
 
-import "time"
+import (
+	"time"
+)
 
 type TextMessage struct {
 	WhatsappID *string
@@ -10,5 +12,11 @@ type TextMessage struct {
 
 	Timestamp time.Time
 
-	Content string
+	Text string
+}
+
+type ImageMessage struct {
+	TextMessage
+
+	Image []byte
 }
