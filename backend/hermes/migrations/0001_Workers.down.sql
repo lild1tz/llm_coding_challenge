@@ -1,0 +1,1 @@
+DROP SCHEMA hermes_data CASCADE;
