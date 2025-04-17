@@ -133,16 +133,31 @@ flowchart LR
 
 ```
 ---
-
-### 🗄️ Схема базы данных Hermes
+## 🗄️ ER‑схема БД Hermes (Mermaid)
 
 ```mermaid
 erDiagram
-    Worker {
-        SERIAL worker_id PK
+
+    %% === Справочники / сущности верхнего уровня ===
+    worker {
+        SERIAL id PK
         varchar(1023) name
     }
 
+    chat_context {
+        SERIAL id PK
+        timestamp created_at
+        varchar(1023) name
+    }
+
+    chat {
+        SERIAL id PK
+        varchar(255) type
+        varchar(1023) chat_name
+        int  chat_context_id FK
+    }
+
+    %% === Каналы связи ===
     whatsapp {
         SERIAL id PK
         varchar(1023) whatsapp_id
@@ -155,78 +170,69 @@ erDiagram
         int  worker_id FK
     }
 
-    Chats {
+    %% === Сообщения / контент ===
+    messages {
         SERIAL id PK
-        varchar(255) type
-        varchar(1023) chat_name
+        int  worker_id FK
+        int  chat_id   FK
+        timestamp created_at
+        text content
+        varchar(1023) role
     }
 
-    ChatContext {
+    verbiage {
         SERIAL id PK
-        int    chat_id   FK
+        int  worker_id FK
+        int  chat_id   FK
         timestamp created_at
-        varchar(1023) name
-    }
-
-    report {
-        SERIAL report_id PK
-        int    chat_context_id FK
-        timestamp started_at
-        timestamp last_updated_at
-        timestamp finished_at
-    }
-
-    Message {
-        SERIAL message_id PK
-        int    worker_id FK
-        int    chat_id   FK
-        timestamp created_at
-        text    content
+        text content
     }
 
     images {
-        SERIAL image_id PK
-        int    message_id FK
+        SERIAL id PK
+        int  message_id FK
         varchar(1023) image_url
     }
 
     tables {
         SERIAL id PK
-        timestamp createdAt
+        timestamp created_at
         jsonb data
-        int    message_id FK
+        int  message_id FK
     }
 
-    Listener {
+    %% === Сервисные таблицы ===
+    listener {
         SERIAL id PK
-        int    worker_id FK
-        int    chat_id   FK
+        int  worker_id FK
+        int  chat_id   FK
+        timestamp created_at
     }
 
-    Verbiage {
-        SERIAL message_id PK
-        int    worker_id FK
-        int    chat_id   FK
-        timestamp sended_at
-        text   content
+    report {
+        SERIAL id PK
+        int  chat_context_id FK
+        timestamp started_at
+        timestamp last_updated_at
+        timestamp finished_at
     }
 
-    %% --- связи ---
-    Worker   ||--|{ whatsapp : "has"
-    Worker   ||--|{ telegram : "has"
-    Worker   ||--|{ Message  : "writes"
-    Worker   ||--|{ Listener : "listens"
-    Worker   ||--|{ Verbiage : "sends"
+    %% ---------- СВЯЗИ ----------
+    worker   ||--o{ whatsapp : "имеет"
+    worker   ||--o{ telegram : "имеет"
+    worker   ||--o{ messages : "пишет"
+    worker   ||--o{ verbiage : "отправляет"
+    worker   ||--o{ listener : "слушает"
 
-    Chats    ||--|{ Message  : "contains"
-    Chats    ||--|{ Listener : "observed by"
-    Chats    ||--|{ Verbiage : "receives"
-    Chats    ||--|{ ChatContext : "has contexts"
+    chat_context ||--|{ chat : "группирует"
+    chat_context ||--|{ report : "отчёты"
 
-    ChatContext ||--|{ report : "aggregates"
-
-    Message  ||--|{ images   : "includes"
-    Message  ||--|{ tables   : "creates"
+    chat ||--o{ messages  : "содержит"
+    chat ||--o{ verbiage  : ""
+    chat ||--o{ listener  : ""
+    
+    messages ||--o{ images : ""
+    messages ||--o{ tables : ""
 ```
 ---
 ### 🤖 Apollo (Python + FastAPI)
@@ -412,7 +418,7 @@ docker-compose restart hermes
   - ускорял работу с типами данных и схемами.
 
 ---
-### 👥 Команда проекта
+### 👥 Команда ```АгроСаентисты```
 
 | Имя | Роль |  Компания | Телеграм |
 |-----|------|------------------------|----------|
