@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.utils import convert_ogg_to_mp3, get_embedding, base64_to_dataurl
+from app.utils import get_embedding, base64_to_dataurl
 from app.prompts import fewshot_text_prompt, message_photo_prompt, message_audio_prompt, change_table_prompt
 from app.models import Table, ClassifyMessageOutput, InputMessage, InputPhoto, InputAudio, OutputAudio, InputChangeTable
 from app.config import Config
@@ -78,9 +78,8 @@ async def transcribe_audio(input: InputAudio) -> OutputAudio:
     audio_file = io.BytesIO(audio_data)
     audio_file.name = f"audio.{file_type}"
 
-    if file_type == "ogg":
-        audio_file = convert_ogg_to_mp3(audio_data)
-        audio_file.name = f"audio.mp3"
+    # if file_type == "ogg" or file_type == "oga":
+    #     audio_file = convert_ogg_to_mp3(audio_data)
 
     transcription = await transcriber.audio.transcriptions.create(
         model=config.TRANSCRIBER_MODEL,

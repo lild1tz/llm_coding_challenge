@@ -1,5 +1,5 @@
 CREATE TABLE hermes_data.audios (
-    id SERIAL PRIMARY KEY,
+    id SERIAL,
     message_id INT NOT NULL,
     audio_url VARCHAR(255) NOT NULL,
 

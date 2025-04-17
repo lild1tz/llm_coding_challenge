@@ -419,12 +419,26 @@ func (m *Manager) ProcessAudioMessage(ctx context.Context, message models.AudioM
 		log.Println("failed to update message: %w", err)
 	}
 
+	if m.filterVerbiage {
+		isVerbiage, err := m.clients.Apollo.CheckVerbiage(ctx, text)
+		if err != nil {
+			return fmt.Errorf("failed to check is verbiage: %w", err)
+		}
+		if isVerbiage {
+			return nil
+		}
+	}
+
 	table, err := m.clients.Apollo.PredictTableFromText(ctx, text)
 	if err != nil {
 		return fmt.Errorf("failed to predict table from text: %w", err)
 	}
 
 	table = m.fillTable(ctx, table)
+
+	fmt.Println("table", table)
+	fmt.Println("len", len(table))
+	fmt.Println("text", text)
 
 	err = m.repositories.ReportsRepo.AddTable(ctx, messageID, time.Now(), table)
 	if err != nil {

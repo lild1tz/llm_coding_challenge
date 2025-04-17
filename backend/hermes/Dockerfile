@@ -10,7 +10,8 @@ COPY hermes/go.mod ./hermes/
 
 RUN go work sync && cd hermes && go mod download
 
-COPY  . .
+COPY  ./libs ./libs
+COPY  ./hermes ./hermes
 RUN go build -o /app/bin/hermes ./hermes/cmd/hermes/main.go
 
 FROM alpine:latest

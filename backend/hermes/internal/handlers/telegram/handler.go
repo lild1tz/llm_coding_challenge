@@ -83,9 +83,24 @@ func (h *Handler) Handle(ctx context.Context, update tgbotapi.Update) error {
 		}()
 	}
 
-	if update.Message.Audio != nil {
+	if update.Message.Audio != nil || update.Message.Voice != nil {
+		var fileID string
+
+		if update.Message.Audio != nil {
+			fileID = update.Message.Audio.FileID
+		} else if update.Message.Voice != nil {
+			fileID = update.Message.Voice.FileID
+		}
+
 		fmt.Println("Тип: аудио")
-		fmt.Println("fileID", update.Message.Audio.FileID)
+		fmt.Println("fileID", fileID)
+
+		go func() {
+			err := h.handleAudioMessage(ctx, fileID, textMessage)
+			if err != nil {
+				fmt.Println("error in handleAudioMessage", err)
+			}
+		}()
 	}
 
 	if update.Message.Text != "" {

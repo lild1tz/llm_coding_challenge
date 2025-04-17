@@ -63,9 +63,18 @@ func (m *Manager) RegisterReport(ctx context.Context, chatContextID int, chatCon
 	m.chatsMux.Lock()
 	chatContext, ok := m.chats[chatContextID]
 	if !ok {
+		report, ok, err := m.tryToGetReport(ctx, chatContextID)
+		if err != nil {
+			log.Printf("failed to get report: %v", err)
+		}
+
+		if !ok || err != nil {
+			report = models.Report{ChatContextID: chatContextID, StartedAt: sendedAt, LastUpdatedAt: sendedAt}
+		}
+
 		chatContext = ReportChannel{
 			messageEvent:    make(chan time.Time),
-			report:          models.Report{ChatContextID: chatContextID, StartedAt: sendedAt, LastUpdatedAt: sendedAt},
+			report:          report,
 			chatContextName: chatContextName,
 		}
 		m.chats[chatContextID] = chatContext
@@ -91,23 +100,23 @@ func (m *Manager) RegisterReport(ctx context.Context, chatContextID int, chatCon
 }
 
 func (m *Manager) processChatReport(ctx context.Context, chatContext ReportChannel) error {
-	reportID, ok, err := m.tryToGetReport(ctx, chatContext.report.ChatContextID)
-	if err != nil {
-		return fmt.Errorf("failed to get report: %w", err)
-	}
-
-	if !ok {
-		reportID, err = m.repositories.ReportsRepo.CreateReport(ctx, chatContext.report)
+	if chatContext.report.ID == 0 {
+		log.Printf("report not found, creating new report")
+		reportID, err := m.repositories.ReportsRepo.CreateReport(ctx, chatContext.report)
 		if err != nil {
 			return fmt.Errorf("failed to create report: %w", err)
 		}
+
+		chatContext.report.ID = reportID
 	}
 
-	m.processMessages(ctx, chatContext)
+	needToFinish := m.processMessages(ctx, chatContext)
 
-	err = m.repositories.ReportsRepo.FinishReport(context.Background(), reportID, time.Now())
-	if err != nil {
-		return fmt.Errorf("failed to finish report: %w", err)
+	if needToFinish {
+		err := m.repositories.ReportsRepo.FinishReport(context.Background(), chatContext.report.ID, time.Now())
+		if err != nil {
+			log.Printf("failed to finish report: %v", err)
+		}
 	}
 
 	m.chatsMux.Lock()
@@ -116,7 +125,7 @@ func (m *Manager) processChatReport(ctx context.Context, chatContext ReportChann
 
 	m.moveMessagesToNewReport(ctx, chatContext)
 
-	err = m.notifyChats(context.Background(), chatContext)
+	err := m.notifyChats(context.Background(), chatContext)
 	if err != nil {
 		return fmt.Errorf("failed to notify chats: %w", err)
 	}
@@ -124,16 +133,16 @@ func (m *Manager) processChatReport(ctx context.Context, chatContext ReportChann
 	return nil
 }
 
-func (m *Manager) tryToGetReport(ctx context.Context, chatContextID int) (int, bool, error) {
+func (m *Manager) tryToGetReport(ctx context.Context, chatContextID int) (models.Report, bool, error) {
 	reports, err := m.repositories.ReportsRepo.GetNotFinishedReports(ctx, chatContextID)
 	if err != nil {
-		return 0, false, fmt.Errorf("failed to get reports: %w", err)
+		return models.Report{}, false, fmt.Errorf("failed to get reports: %w", err)
 	}
 
 	var notFinishedReports []models.Report
 
 	for _, report := range reports {
-		if report.IsFinished() {
+		if report.IsNeedToFinish(m.finishHour) {
 			err = m.repositories.ReportsRepo.FinishReport(ctx, report.ID, time.Now())
 			if err != nil {
 				log.Printf("failed to finish report: %v", err)
@@ -145,11 +154,12 @@ func (m *Manager) tryToGetReport(ctx context.Context, chatContextID int) (int, b
 	}
 
 	if len(notFinishedReports) == 0 {
-		return 0, false, nil
+		return models.Report{}, false, nil
 	}
 
 	if len(notFinishedReports) > 1 {
 		for i := 1; i < len(notFinishedReports); i++ {
+			log.Printf("finishing report: %d", notFinishedReports[i].ID)
 			err = m.repositories.ReportsRepo.FinishReport(ctx, notFinishedReports[i].ID, time.Now())
 			if err != nil {
 				log.Printf("failed to finish report: %v", err)
@@ -157,10 +167,11 @@ func (m *Manager) tryToGetReport(ctx context.Context, chatContextID int) (int, b
 		}
 	}
 
-	return notFinishedReports[0].ID, true, nil
+	log.Printf("report found, returning report ID: %d", notFinishedReports[0].ID)
+	return notFinishedReports[0], true, nil
 }
 
-func (m *Manager) processMessages(ctx context.Context, chatContext ReportChannel) {
+func (m *Manager) processMessages(ctx context.Context, chatContext ReportChannel) bool {
 	for {
 		select {
 		case messageTime := <-chatContext.messageEvent:
@@ -170,16 +181,9 @@ func (m *Manager) processMessages(ctx context.Context, chatContext ReportChannel
 			}
 		case <-time.After(time.Duration(m.timeout) * time.Second):
 			log.Println("chat report timeout")
-			if chatContext.report.IsNeedToFinish(m.finishHour) {
-				return
-			}
-
-			err := m.notifyChats(context.Background(), chatContext)
-			if err != nil {
-				log.Printf("failed to notify chats: %v", err)
-			}
+			return chatContext.report.IsNeedToFinish(m.finishHour)
 		case <-ctx.Done():
-			return
+			return false
 		}
 	}
 }
