@@ -6,29 +6,26 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/gabriel-vasile/mimetype"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/managers/reporter"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/models"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services"
 )
 
 type Config struct {
-	FilterVerbiage  bool `json:"FILTER_VERBIAGE" cfgDefault:"true"`
-	ResponseTimeout int  `json:"RESPONSE_TIMEOUT" cfgDefault:"15"`
+	FilterVerbiage bool `json:"FILTER_VERBIAGE" cfgDefault:"true"`
 
 	AddChatContextName bool `json:"ADD_CHAT_CONTEXT_NAME" cfgDefault:"true"`
 }
 
-func NewManager(shutdownCtx context.Context, clients *services.Clients, cfg Config) *Manager {
+func NewManager(shutdownCtx context.Context, cfg Config, clients *services.Clients, reporter *reporter.Manager) *Manager {
 	return &Manager{
 		shutdownCtx:        shutdownCtx,
 		clients:            clients,
-		chatsMux:           sync.Mutex{},
-		chats:              make(map[int]chatChannel),
+		reporter:           reporter,
 		filterVerbiage:     cfg.FilterVerbiage,
-		timeout:            cfg.ResponseTimeout,
 		addChatContextName: cfg.AddChatContextName,
 	}
 }
@@ -38,22 +35,15 @@ type Manager struct {
 
 	clients *services.Clients
 
-	chatsMux sync.Mutex
-	chats    map[int]chatChannel
+	reporter *reporter.Manager
 
 	// feature flags
 	filterVerbiage     bool
-	timeout            int
 	addChatContextName bool
 }
 
-type chatChannel struct {
-	ch        chan time.Time
-	startedAt time.Time
-}
-
-func (m *Manager) AsyncProcessTextMessage(ctx context.Context, message models.TextMessage) {
-	err := m.ProcessTextMessage(ctx, message)
+func (m *Manager) AsyncProcessTextMessage(message models.TextMessage) {
+	err := m.ProcessTextMessage(m.shutdownCtx, message)
 	if err != nil {
 		log.Printf("failed to process text message: %v", err)
 	}
@@ -81,13 +71,12 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 		return fmt.Errorf("failed to get chat ID: %w", err)
 	}
 
-	chatContextName, err := m.clients.Postgres.GetChatContextName(ctx, chatContextID)
-	if err != nil {
-		return fmt.Errorf("failed to get chat context name: %w", err)
-	}
-
-	if !m.addChatContextName {
-		chatContextName = ""
+	chatContextName := ""
+	if m.addChatContextName {
+		chatContextName, err = m.clients.Postgres.GetChatContextName(ctx, chatContextID)
+		if err != nil {
+			return fmt.Errorf("failed to get chat context name: %w", err)
+		}
 	}
 
 	var messageID int
@@ -108,7 +97,7 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 		return nil
 	}
 
-	startedAt := m.RegisterReport(ctx, chatContextID, chatContextName, message.Timestamp)
+	startedAt := m.reporter.RegisterReport(ctx, chatContextID, chatContextName, message.Timestamp)
 
 	go func() {
 		chatIDs, err := m.clients.Postgres.GetChats(ctx, chatContextID)
@@ -203,139 +192,6 @@ func (m *Manager) GetWorkerID(ctx context.Context, message models.TextMessage) (
 	return workerID, nil
 }
 
-func (m *Manager) RegisterReport(ctx context.Context, chatContextID int, chatContextName string, timestamp time.Time) time.Time {
-	if ctx.Err() != nil {
-		return time.Now()
-	}
-
-	m.chatsMux.Lock()
-	ch, ok := m.chats[chatContextID]
-	if !ok {
-		ch = chatChannel{
-			ch:        make(chan time.Time),
-			startedAt: timestamp,
-		}
-		m.chats[chatContextID] = ch
-
-		go func() {
-			err := m.processChatReport(m.shutdownCtx, ch.ch, chatContextID, chatContextName, ch.startedAt)
-			if err != nil {
-				log.Printf("failed to process chat report: %v", err)
-			}
-		}()
-	}
-	m.chatsMux.Unlock()
-
-	select {
-	case ch.ch <- timestamp:
-	case <-m.shutdownCtx.Done():
-		return time.Now()
-	case <-ctx.Done():
-		return time.Now()
-	}
-
-	return ch.startedAt
-}
-
-func (m *Manager) processChatReport(ctx context.Context, messageEvent chan time.Time, chatContextID int, chatContextName string, startedAt time.Time) error {
-	reportID, err := m.clients.Postgres.CreateReport(ctx, chatContextID, startedAt)
-	if err != nil {
-		return fmt.Errorf("failed to create report: %w", err)
-	}
-
-Loop:
-	for {
-		select {
-		case messageTime := <-messageEvent:
-			err := m.clients.Postgres.UpdateReport(ctx, reportID, messageTime)
-			if err != nil {
-				log.Printf("failed to update report: %v", err)
-			}
-		case <-time.After(time.Duration(m.timeout) * time.Second):
-			log.Println("chat report timeout")
-			break Loop
-		case <-m.shutdownCtx.Done():
-			break Loop
-		}
-	}
-
-	m.chatsMux.Lock()
-	delete(m.chats, chatContextID)
-	m.chatsMux.Unlock()
-
-	log.Println("selecting missed messages")
-Loop2:
-	for {
-		select {
-		case t := <-messageEvent:
-			m.RegisterReport(ctx, chatContextID, chatContextName, t)
-		default:
-			break Loop2
-		}
-	}
-	log.Println("finished selecting missed messages")
-
-	err = m.clients.Postgres.FinishReport(context.Background(), reportID, time.Now())
-	if err != nil {
-		return fmt.Errorf("failed to finish report: %w", err)
-	}
-
-	if !m.addChatContextName {
-		chatContextName = ""
-	}
-
-	url, err := m.clients.Googledrive.GetTableURL(context.Background(), models.GetTableName(startedAt, chatContextName))
-	if err != nil {
-		return fmt.Errorf("failed to get table URL: %w", err)
-	}
-
-	err = m.notifyChats(ctx, chatContextID, url)
-	if err != nil {
-		return fmt.Errorf("failed to notify chats: %w", err)
-	}
-
-	return nil
-}
-
-func (m *Manager) notifyChats(ctx context.Context, chatContextID int, url string) error {
-	chats, err := m.clients.Postgres.GetChats(ctx, chatContextID)
-	if err != nil {
-		return fmt.Errorf("failed to get chats: %w", err)
-	}
-
-	var errs []error
-
-	for _, chatID := range chats {
-		chatType, chatName, err := m.clients.Postgres.GetChatType(ctx, chatID)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("failed to get chat type: %w", err))
-			continue
-		}
-
-		if chatType == "whatsapp" {
-			listenerID, err := m.clients.Postgres.GetListenerID(ctx, chatID)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to get listener ID: %w", err))
-				continue
-			}
-
-			err = m.clients.Whatsapp.SendReport(ctx, chatName, listenerID, url)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to send report: %w", err))
-				continue
-			}
-		} else if chatType == "telegram" {
-			err = m.clients.Telegram.SendReport(ctx, chatName, url)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to send report: %w", err))
-				continue
-			}
-		}
-	}
-
-	return errors.Join(errs...)
-}
-
 func (m *Manager) fillTable(ctx context.Context, table models.Table) models.Table {
 	for i, row := range table {
 		if row.Date == "" {
@@ -373,8 +229,8 @@ func (m *Manager) fillTable(ctx context.Context, table models.Table) models.Tabl
 	return table
 }
 
-func (m *Manager) AsyncProcessImageMessage(ctx context.Context, message models.ImageMessage) {
-	err := m.ProcessImageMessage(ctx, message)
+func (m *Manager) AsyncProcessImageMessage(message models.ImageMessage) {
+	err := m.ProcessImageMessage(m.shutdownCtx, message)
 	if err != nil {
 		log.Printf("failed to process image message: %v", err)
 	}
@@ -393,13 +249,12 @@ func (m *Manager) ProcessImageMessage(ctx context.Context, message models.ImageM
 		return fmt.Errorf("failed to get chat ID: %w", err)
 	}
 
-	chatContextName, err := m.clients.Postgres.GetChatContextName(ctx, chatContextID)
-	if err != nil {
-		return fmt.Errorf("failed to get chat context name: %w", err)
-	}
-
-	if !m.addChatContextName {
-		chatContextName = ""
+	chatContextName := ""
+	if m.addChatContextName {
+		chatContextName, err = m.clients.Postgres.GetChatContextName(ctx, chatContextID)
+		if err != nil {
+			return fmt.Errorf("failed to get chat context name: %w", err)
+		}
 	}
 
 	messageID, err := m.clients.Postgres.AddMessage(ctx, workerID, chatID, message.Timestamp, message.Text, "user")
@@ -407,7 +262,7 @@ func (m *Manager) ProcessImageMessage(ctx context.Context, message models.ImageM
 		return fmt.Errorf("failed to add message: %w", err)
 	}
 
-	startedAt := m.RegisterReport(ctx, chatContextID, chatContextName, message.Timestamp)
+	startedAt := m.reporter.RegisterReport(ctx, chatContextID, chatContextName, message.Timestamp)
 
 	go func() {
 		chatIDs, err := m.clients.Postgres.GetChats(ctx, chatContextID)

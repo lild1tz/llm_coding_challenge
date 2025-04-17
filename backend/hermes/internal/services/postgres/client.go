@@ -278,7 +278,31 @@ func (c *Client) AddTableLine(ctx context.Context, messageID int, createdAt time
 	return nil
 }
 
-func (c *Client) CreateReport(ctx context.Context, chatContextID int, timestamp time.Time) (int, error) {
+func (c *Client) GetNotFinishedReports(ctx context.Context, chatContextID int) ([]models.Report, error) {
+	query := `
+	SELECT id, chat_context_id, started_at, last_updated_at FROM hermes_data.report WHERE chat_context_id = $1 AND finished_at IS NULL;
+	`
+
+	rows, err := c.Query(ctx, query, chatContextID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get not finished reports: %w", err)
+	}
+
+	reports := make([]models.Report, 0)
+	for rows.Next() {
+		var report models.Report
+		err := rows.Scan(&report.ID, &report.ChatContextID, &report.StartedAt, &report.LastUpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan report: %w", err)
+		}
+
+		reports = append(reports, report)
+	}
+
+	return reports, nil
+}
+
+func (c *Client) CreateReport(ctx context.Context, report models.Report) (int, error) {
 	query := `
 	INSERT INTO hermes_data.report (chat_context_id, started_at, last_updated_at)
 	VALUES ($1, $2, $2)
@@ -286,7 +310,7 @@ func (c *Client) CreateReport(ctx context.Context, chatContextID int, timestamp 
 	`
 
 	var reportID int
-	err := c.QueryRow(ctx, query, chatContextID, timestamp).Scan(&reportID)
+	err := c.QueryRow(ctx, query, report.ChatContextID, report.StartedAt).Scan(&reportID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create report: %w", err)
 	}

@@ -16,6 +16,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/managers/recognizer"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/managers/reporter"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/models"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services"
 	"github.com/lild1tz/llm_coding_challenge/backend/libs/go/config"
@@ -26,6 +27,7 @@ type Config struct {
 	Services services.Config
 
 	Recognizer recognizer.Config
+	Reporter   reporter.Config
 }
 
 func main() {
@@ -43,7 +45,9 @@ func main() {
 
 	defer clients.Release()
 
-	manager := recognizer.NewManager(ctx, clients, cfg.Recognizer)
+	reporter := reporter.NewManager(ctx, cfg.Reporter, clients)
+
+	manager := recognizer.NewManager(ctx, cfg.Recognizer, clients, reporter)
 
 	clients.Whatsapp.AddEventHandler(func(evt interface{}) {
 		if ctx.Err() != nil {
@@ -77,7 +81,6 @@ func main() {
 				fmt.Println("Текст:", content)
 
 				go manager.AsyncProcessTextMessage(
-					ctx,
 					models.TextMessage{
 						WhatsappID: &whatsappID,
 						TelegramID: nil,
@@ -104,7 +107,7 @@ func main() {
 				// Кодируем в Base64
 				_ = base64.StdEncoding.EncodeToString(data)
 
-				go manager.AsyncProcessImageMessage(ctx, models.ImageMessage{
+				go manager.AsyncProcessImageMessage(models.ImageMessage{
 					TextMessage: models.TextMessage{
 						WhatsappID: &whatsappID,
 						TelegramID: nil,
@@ -197,7 +200,7 @@ func main() {
 				return nil
 			}
 
-			go manager.AsyncProcessImageMessage(ctx, models.ImageMessage{
+			go manager.AsyncProcessImageMessage(models.ImageMessage{
 				TextMessage: models.TextMessage{
 					TelegramID: &telegramID,
 					ChatName:   chatName,
@@ -211,7 +214,6 @@ func main() {
 
 		if update.Message.Text != "" {
 			go manager.AsyncProcessTextMessage(
-				ctx,
 				models.TextMessage{
 					TelegramID: &telegramID,
 					ChatName:   chatName,
