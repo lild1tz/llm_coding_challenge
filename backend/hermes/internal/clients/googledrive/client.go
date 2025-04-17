@@ -19,8 +19,8 @@ import (
 )
 
 type Config struct {
-	JSONKey  string `json:"JSON_KEY"`
-	FolderID string `json:"FOLDER_ID"`
+	JSONKey  string `json:"DRIVE_JSON_KEY"`
+	FolderID string `json:"DRIVE_FOLDER_ID"`
 }
 
 func NewClient(cfg Config) (*Client, error) {
