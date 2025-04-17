@@ -1,26 +1,34 @@
-# backend/superset/Dockerfile
+# Используем официальный образ Superset
 FROM apache/superset:latest
 
-# 1) Копируем ваш конфиг
-COPY superset_config.py /app/
-ENV SUPERSET_CONFIG_PATH=/app/superset_config.py
-# (опционально) чтобы том с данными тоже использовался как HOME
-ENV SUPERSET_HOME=/app/superset_home
+# Переходим на root, чтобы скопировать свои файлы и установить зависимости
+USER root
 
-# 2) Устанавливаем зависимости
-COPY requirements.txt /app/requirements.txt
-RUN pip install -r /app/requirements.txt
+# Копируем свой конфиг и список зависимостей
+COPY superset_config.py /app/pythonpath/superset_config.py
+COPY requirements.txt  /app/requirements.txt
+
+# Создаём HOME-директорию и устанавливаем права, затем ставим pip‑пакеты
+RUN mkdir -p /app/superset_home \
+    && chown superset:superset /app/superset_home \
+    && pip install --no-cache-dir -r /app/requirements.txt
+
+# Возвращаемся к непривилегированному пользователю
+USER superset
+
+# Указываем Superset, где искать конфиг, и где хранить HOME
+ENV SUPERSET_CONFIG_PATH=/app/pythonpath/superset_config.py \
+    SUPERSET_HOME=/app/superset_home
 
 EXPOSE 8088
 
-# 3) При старте: миграции в Postgres, создание админа, инициализация и запуск сервера
-CMD ["bash", "-lc", "\
-    superset db upgrade && \
+# Shell‑форма CMD: выполнит миграции, создаст админа (если нужно), и запустит сервер
+CMD superset db upgrade && \
     superset fab create-admin \
-      --username $SUPERSET_ADMIN_USERNAME \
-      --firstname $SUPERSET_ADMIN_FIRSTNAME \
-      --lastname $SUPERSET_ADMIN_LASTNAME \
-      --email $SUPERSET_ADMIN_EMAIL \
-      --password $SUPERSET_ADMIN_PASSWORD && \
+      --username "$SUPERSET_ADMIN_USERNAME" \
+      --firstname "$SUPERSET_ADMIN_FIRSTNAME" \
+      --lastname "$SUPERSET_ADMIN_LASTNAME" \
+      --email "$SUPERSET_ADMIN_EMAIL" \
+      --password "$SUPERSET_ADMIN_PASSWORD" && \
     superset init && \
-    exec superset run -h 0.0.0.0 -p 8088"]
+    exec superset run -h 0.0.0.0 -p 8088

@@ -1,10 +1,22 @@
+# backend/superset/superset_config.py
+
 import os
 
-# ваш уже заданный секретный ключ
-SECRET_KEY = "z7FjK2pQ9xY0e4WbR8vNl3sD5mU1tA6y"
+# Секретный ключ для Flask-сессий и CSRF
+SECRET_KEY = os.environ.get("SUPERSET_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("Не задана переменная окружения SUPERSET_SECRET_KEY")
 
-# здесь указываем адрес вашей БД Postgres для метаданных Superset
-SQLALCHEMY_DATABASE_URI = (
-    os.environ.get("SUPERSET_SQLALCHEMY_DATABASE_URI")
-    or "postgresql://hermes:password@postgres:5432/hermes?sslmode=disable"
-)
+# Подключение к БД метаданных Superset
+SQLALCHEMY_DATABASE_URI = os.environ.get("SUPERSET_SQLALCHEMY_DATABASE_URI")
+if not SQLALCHEMY_DATABASE_URI:
+    raise RuntimeError("Не задана переменная окружения SUPERSET_SQLALCHEMY_DATABASE_URI")
+
+# (Опционально) дополнительные настройки:
+# - Включение React CRUD-views
+FEATURE_FLAGS = {
+    "LISTVIEWS_DEFAULT_CARD_VIEW": True,
+}
+
+# Место хранения пользовательских артефактов
+SUPERSET_HOME = os.environ.get("SUPERSET_HOME", "/app/superset_home")
