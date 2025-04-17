@@ -10,7 +10,7 @@ from joblib import load
 from openai import AsyncOpenAI
 from pathlib import Path
 import base64
-import tempfile
+import io
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -75,15 +75,17 @@ async def transcribe_audio(input: InputAudio) -> OutputAudio:
     file_type = input.type.lower()
     audio_data = base64.b64decode(base64_str)
 
-    with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as temp_audio_file:
-        temp_audio_file.write(audio_data)
-        temp_audio_file_path = temp_audio_file.name
+    audio_file = io.BytesIO(audio_data)
+    audio_file.name = f"audio.{file_type}"
 
-    with open(temp_audio_file_path, "rb") as audio_file:
-        transcription = await transcriber.audio.transcriptions.create(
-            model=config.TRANSCRIBER_MODEL,
-            file=audio_file
-        )
+    # if file_type == "ogg" or file_type == "oga":
+    #     audio_file = convert_ogg_to_mp3(audio_data)
+
+    transcription = await transcriber.audio.transcriptions.create(
+        model=config.TRANSCRIBER_MODEL,
+        file=audio_file
+    )
+    
     return OutputAudio(text=transcription.text)
 
 @app.post("/change_table", response_model=Table, summary="Изменение таблицы", description="Изменяет таблицу на основе входных данных и возвращает обновленную таблицу.")

@@ -44,6 +44,10 @@ func (c *stubClient) PredictTableFromImage(ctx context.Context, image []byte) (m
 	}, nil
 }
 
+func (c *stubClient) PredictTextFromAudio(ctx context.Context, audio []byte) (string, error) {
+	return "test", nil
+}
+
 var x int
 
 func (c *stubClient) CheckVerbiage(ctx context.Context, text string) (bool, error) {

@@ -19,8 +19,8 @@ import (
 )
 
 type Config struct {
-	JSONKey  string `json:"JSON_KEY"`
-	FolderID string `json:"FOLDER_ID"`
+	JSONKey  string `json:"DRIVE_JSON_KEY"`
+	FolderID string `json:"DRIVE_FOLDER_ID"`
 }
 
 func NewClient(cfg Config) (*Client, error) {
@@ -101,8 +101,8 @@ func (c *Client) SaveMessage(ctx context.Context, fileName string, text string) 
 	return nil
 }
 
-func (c *Client) SaveImage(ctx context.Context, fileName string, image []byte) error {
-	mime := mimetype.Detect(image)
+func (c *Client) SaveMedia(ctx context.Context, fileName string, media []byte) error {
+	mime := mimetype.Detect(media)
 
 	file := &drive.File{
 		Name:     fileName,
@@ -110,7 +110,7 @@ func (c *Client) SaveImage(ctx context.Context, fileName string, image []byte) e
 		MimeType: mime.String(),
 	}
 
-	_, err := c.Drive.Files.Create(file).Media(bytes.NewReader(image)).Do()
+	_, err := c.Drive.Files.Create(file).Media(bytes.NewReader(media)).Do()
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}

@@ -2,9 +2,10 @@ package models
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"time"
+
+	"github.com/lild1tz/llm_coding_challenge/backend/libs/go/loctime"
 )
 
 type Line struct {
@@ -27,15 +28,10 @@ type Line struct {
 
 type Table []Line
 
-func GetTableName(startedAt time.Time, chatContextName string) string {
-	loc, err := time.LoadLocation("Europe/Moscow")
-	if err != nil {
-		log.Println("failed to load location: %w", err)
-	}
+func GetTableName(t time.Time, chatContextName string) string {
+	t = loctime.Transfer(t)
 
-	timestamp := startedAt.In(loc)
-
-	fileName := timestamp.Format("04м15ч02/01/2006") + "_AgroScientists"
+	fileName := t.Format("04м15ч02/01/2006") + "_AgroScientists"
 	if chatContextName != "" {
 		fileName += "_" + chatContextName
 	}
@@ -43,27 +39,22 @@ func GetTableName(startedAt time.Time, chatContextName string) string {
 	return fileName
 }
 
-func GetBasicName(name string, number int, timestamp time.Time, chatContextName string) string {
-	loc, err := time.LoadLocation("Europe/Moscow")
-	if err != nil {
-		log.Println("failed to load location: %w", err)
-	}
+func GetBasicName(name string, number int, t time.Time, chatContextName string) string {
+	t = loctime.Transfer(t)
 
-	timestamp = timestamp.In(loc)
-
-	fileName := fmt.Sprintf("%s_%d_%s", strings.ReplaceAll(name, " ", "-"), number, timestamp.Format("04м15ч02/01/2006"))
+	fileName := fmt.Sprintf("%s_%d_%s", strings.ReplaceAll(name, " ", "-"), number, t.Format("04м15ч02/01/2006"))
 
 	if chatContextName != "" {
 		fileName += "_" + chatContextName
 	}
 
 	return fileName
+}
+
+func GetFileName(name string, number int, timestamp time.Time, chatContextName string, postfix string) string {
+	return GetBasicName(name, number, timestamp, chatContextName) + postfix
 }
 
 func GetDocxName(name string, number int, timestamp time.Time, chatContextName string) string {
-	return GetBasicName(name, number, timestamp, chatContextName) + ".docx"
-}
-
-func GetImageName(name string, number int, timestamp time.Time, chatContextName string, postfix string) string {
-	return GetBasicName(name, number, timestamp, chatContextName) + postfix
+	return GetFileName(name, number, timestamp, chatContextName, ".docx")
 }

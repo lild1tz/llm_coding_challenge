@@ -1,3 +1,4 @@
+import io
 import json
 
 def safe_json(text):
@@ -15,5 +16,3 @@ def get_embedding(text: str, tokenizer, session):
 
 def base64_to_dataurl(base64_str: str, file_type: str) -> str:
     return f"data:image/{file_type};base64,{base64_str}"
-
-

@@ -20,3 +20,9 @@ type ImageMessage struct {
 
 	Image []byte
 }
+
+type AudioMessage struct {
+	TextMessage
+
+	Audio []byte
+}
