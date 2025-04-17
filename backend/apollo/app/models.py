@@ -31,3 +31,7 @@ class InputAudio(BaseModel):
 
 class OutputAudio(BaseModel):
     text: str = Field(..., description="Текст, полученный из аудиофайла")
+
+class InputChangeTable(BaseModel):
+    table: Table = Field(..., description="Таблица, которую нужно изменить")
+    message: str = Field(..., description="Сообщение от пользователя, что нужно изменить в таблице")

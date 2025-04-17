@@ -42,15 +42,74 @@
 - 📁 Разделение задач по проектам (например, классификация, разметка, нормализация)
 
 ---
+## 🗂️ Архитектура сервиса Hermes 🙂
 
-## 🧩 Архитектура
+```mermaid
+flowchart LR
+    %% ---------- Входящие каналы ----------
+    subgraph Inbound
+        direction TB
+        WA[WhatsApp]
+        TG[Telegram]
+    end
 
-- **Hermes** — шлюз сообщений: приём, фильтрация, маршрутизация.
-- **Apollo** — LLM-сервис: структурирование текстов, аудио, фото.
-- **PostgreSQL** — централизованное хранилище данных.
-- **Google Drive** — хранилище обработанных файлов.
-- **Apache Superset** — визуальная аналитика агроданных.
-- **LangSmith** — мониторинг LLM и трейсинг цепочек.
+    %% ---------- Hermes (Ingress) ----------
+    H1["Hermes<br/>(ingress)"]
+
+    WA --> H1
+    TG --> H1
+
+    %% ---------- Сториджи (Ingress) ----------
+    subgraph Storage_In
+        direction LR
+        D1["Google&nbsp;Drive"]
+        PG1[(PostgreSQL)]
+    end
+    H1 --> D1
+    H1 --> PG1
+
+    %% ---------- Apollo ----------
+    AP["Apollo<br/>(LLM‑сервис)"]
+    H1 -- "распознавание / флуд‑чек" --> AP
+
+    %% ---------- LangSmith ----------
+    LS["LangSmith<br/>(tracing)"]
+    AP -. метрики .- LS
+
+    %% ---------- Hermes (Egress) ----------
+    H2["Hermes<br/>(egress)"]
+    AP --> H2
+
+    %% ---------- Сториджи (Egress) ----------
+    subgraph Storage_Out
+        direction LR
+        D2["Google&nbsp;Drive"]
+        PG2[(PostgreSQL)]
+    end
+    H2 --> D2
+    H2 --> PG2
+
+    %% ---------- Исходящие каналы ----------
+    H2 --> WA2[WhatsApp]
+    H2 --> TG2[Telegram]
+
+    %% ---------- BI / аналитика ----------
+    SUP["Apache Superset<br/>(dashboards)"]
+    PG2 --> SUP
+
+```
+---
+
+## Сервисы и их роли
+
+| Сервис            | Назначение                                                                                     |
+|-------------------|-------------------------------------------------------------------------------------------------|
+| **Hermes**        | Шлюз сообщений: приём, фильтрация, маршрутизация из WhatsApp / Telegram в дальнейшие модули.    |
+| **Apollo**        | LLM‑сервис: извлечение сущностей, структурирование текстов, аудио, фото.                        |
+| **PostgreSQL**    | Централизованное реляционное хранилище данных (метаданные, логи, справочники).                  |
+| **Google Drive**  | Объектное хранилище обработанных файлов (изображения, документы, архивы отчётов).               |
+| **Apache Superset** | Визуальная аналитика агроданных: дашборды, Ad‑hoc‑запросы, отчёты для менеджмента.            |
+| **LangSmith**     | Мониторинг LLM‑цепочек (tracing), метрики качества, алерты на деградацию моделей.              |
 
 
 ## 📦 Компоненты
@@ -65,7 +124,7 @@
 
 ### 🛰️ Hermes (Go)
 
-Hermes — мультиканальный шлюз, обрабатывающий входящие сообщения агрономов.
+```Hermes``` — мультиканальный шлюз, обрабатывающий входящие сообщения агрономов.
 
 **Возможности:**
 - Поддержка **Telegram** и **WhatsApp**;
@@ -75,19 +134,172 @@ Hermes — мультиканальный шлюз, обрабатывающий
 - Асинхронная обработка.
 
 ---
+## 🗂️ Архитектура сервиса Hermes
 
+```mermaid
+flowchart LR
+    %% ---------- Входящие каналы ----------
+    subgraph Inbound
+        direction TB
+        WA[WhatsApp]
+        TG[Telegram]
+    end
+
+    %% ---------- Hermes (Ingress) ----------
+    H1["Hermes<br/>(ingress)"]
+
+    WA --> H1
+    TG --> H1
+
+    %% ---------- Сториджи (Ingress) ----------
+    subgraph Storage_In
+        direction LR
+        D1["Google&nbsp;Drive"]
+        PG1[(PostgreSQL)]
+    end
+    H1 --> D1
+    H1 --> PG1
+
+    %% ---------- Apollo ----------
+    AP["Apollo<br/>(LLM‑сервис)"]
+    H1 -- "распознавание / флуд‑чек" --> AP
+
+    %% ---------- LangSmith ----------
+    LS["LangSmith<br/>(tracing)"]
+    AP -. метрики .- LS
+
+    %% ---------- Hermes (Egress) ----------
+    H2["Hermes<br/>(egress)"]
+    AP --> H2
+
+    %% ---------- Сториджи (Egress) ----------
+    subgraph Storage_Out
+        direction LR
+        D2["Google&nbsp;Drive"]
+        PG2[(PostgreSQL)]
+    end
+    H2 --> D2
+    H2 --> PG2
+
+    %% ---------- Исходящие каналы ----------
+    H2 --> WA2[WhatsApp]
+    H2 --> TG2[Telegram]
+
+    %% ---------- BI / аналитика ----------
+    SUP["Apache Superset<br/>(dashboards)"]
+    PG2 --> SUP
+
+```
+---
+
+### 🗄️ Схема базы данных Hermes
+
+```mermaid
+erDiagram
+    Worker {
+        SERIAL worker_id PK
+        varchar(1023) name
+    }
+
+    whatsapp {
+        SERIAL id PK
+        varchar(1023) whatsapp_id
+        int  worker_id FK
+    }
+
+    telegram {
+        SERIAL id PK
+        varchar(1023) telegram_id
+        int  worker_id FK
+    }
+
+    Chats {
+        SERIAL id PK
+        varchar(255) type
+        varchar(1023) chat_name
+    }
+
+    ChatContext {
+        SERIAL id PK
+        int    chat_id   FK
+        timestamp created_at
+        varchar(1023) name
+    }
+
+    report {
+        SERIAL report_id PK
+        int    chat_context_id FK
+        timestamp started_at
+        timestamp last_updated_at
+        timestamp finished_at
+    }
+
+    Message {
+        SERIAL message_id PK
+        int    worker_id FK
+        int    chat_id   FK
+        timestamp created_at
+        text    content
+    }
+
+    images {
+        SERIAL image_id PK
+        int    message_id FK
+        varchar(1023) image_url
+    }
+
+    tables {
+        SERIAL id PK
+        timestamp createdAt
+        jsonb data
+        int    message_id FK
+    }
+
+    Listener {
+        SERIAL id PK
+        int    worker_id FK
+        int    chat_id   FK
+    }
+
+    Verbiage {
+        SERIAL message_id PK
+        int    worker_id FK
+        int    chat_id   FK
+        timestamp sended_at
+        text   content
+    }
+
+    %% --- связи ---
+    Worker   ||--|{ whatsapp : "has"
+    Worker   ||--|{ telegram : "has"
+    Worker   ||--|{ Message  : "writes"
+    Worker   ||--|{ Listener : "listens"
+    Worker   ||--|{ Verbiage : "sends"
+
+    Chats    ||--|{ Message  : "contains"
+    Chats    ||--|{ Listener : "observed by"
+    Chats    ||--|{ Verbiage : "receives"
+    Chats    ||--|{ ChatContext : "has contexts"
+
+    ChatContext ||--|{ report : "aggregates"
+
+    Message  ||--|{ images   : "includes"
+    Message  ||--|{ tables   : "creates"
+```
+---
 ### 🤖 Apollo (Python + FastAPI)
 
-Apollo — интеллектуальный мультимодальный процессор для агросообщений.
+```Apollo``` — интеллектуальный мультимодальный процессор для агросообщений.
 
 **Возможности:**
 - `process_message` — структурирование текста;
 - `classify_message` — классификация по LLM;
 - `process_photo` — OCR/LLM;
 - `transcribe_audio` — транскрибация Whisper;
+- `change_table` - исправление таблицы по запросу
 
 **LLM-инфраструктура:**
-- `ChatGPT-4o` (или GigaChat/Gemini);
+- `ChatGPT-4.1`;
 - `Whisper-1`;
 - `sentence-transformers/all-MiniLM-L6-v2`;
 - интеграция с LangChain и LangSmith.
@@ -154,7 +366,7 @@ Apollo — интеллектуальный мультимодальный пр�
   "type": "jpeg"
 }
 ```
-**Ответ**: аналогичен ответу /process_message.
+
 
 
 ### 📍 POST `/transcribe_audio`
@@ -173,6 +385,29 @@ Apollo — интеллектуальный мультимодальный пр�
   "text": "Пример транскрибированного текста"
 }
 ```
+
+### 📍 POST `/change_table`
+🔹 **Описание**: Изменение таблицы на основе пользовательских инструкций.
+
+**Запрос:**
+```json
+{
+  "table": [
+    {
+      "date": "17.04.2025",
+      "division": "Юг",
+      "operation": "Пахота",
+      "culture": "Пшеница",
+      "per_day": 50,
+      "per_operation": 150,
+      "val_day": null,
+      "val_beginning": null
+    }
+  ],
+  "message": "Изменить дату на 18.04.2025"
+}
+```
+#### **Ответ**: аналогичен ответу /process_message.
 ---
 
 ## 🔄 Сценарий взаимодействия
