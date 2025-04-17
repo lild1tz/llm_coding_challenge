@@ -157,3 +157,49 @@ func (c *client) PredictTableFromImage(ctx context.Context, image []byte) (model
 
 	return responseBody.Table, nil
 }
+
+type RequestBodyPredictTextFromAudio struct {
+	Audio string `json:"audio"`
+	Type  string `json:"type"`
+}
+
+type ResponseBodyPredictTextFromAudio struct {
+	Text string `json:"text"`
+}
+
+func (c *client) PredictTextFromAudio(ctx context.Context, audio []byte) (string, error) {
+	mime := mimetype.Detect(audio)
+	extension := mime.Extension()
+	extension = strings.TrimPrefix(extension, ".")
+
+	jsonBody, err := json.Marshal(RequestBodyPredictTextFromAudio{Audio: base64.StdEncoding.EncodeToString(audio), Type: extension})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", c.cfg.ApolloURL+"/transcribe_audio", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send request: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to get response: %w", err)
+	}
+
+	var responseBody ResponseBodyPredictTextFromAudio
+	err = json.NewDecoder(resp.Body).Decode(&responseBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode response body: %w", err)
+	}
+
+	defer resp.Body.Close()
+
+	return responseBody.Text, nil
+}

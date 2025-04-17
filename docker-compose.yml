@@ -54,6 +54,10 @@ services:
       dockerfile: hermes/Dockerfile
     environment:
       DATABASE_URL: postgresql://hermes:password@postgres:5432/hermes?sslmode=disable
+
+      APOLLO_IS_STUB: "false"
+      
+      FILTER_VERBIAGE: "true"
     depends_on:
       postgres:
         condition: service_healthy

@@ -34,6 +34,21 @@ func (r *Repository) AddMessage(ctx context.Context, workerID int, chatID int, t
 	return messageID, nil
 }
 
+func (r *Repository) UpdateMessage(ctx context.Context, messageID int, text string) error {
+	query := `
+	UPDATE hermes_data.messages 
+	SET content = $2 
+	WHERE id = $1;
+	`
+
+	_, err := r.postgres.Exec(ctx, query, messageID, text)
+	if err != nil {
+		return fmt.Errorf("failed to update message: %w", err)
+	}
+
+	return nil
+}
+
 func (r *Repository) AddImage(ctx context.Context, messageID int, url string) error {
 	query := `
 	INSERT INTO hermes_data.images (message_id, image_url)
@@ -43,6 +58,20 @@ func (r *Repository) AddImage(ctx context.Context, messageID int, url string) er
 	_, err := r.postgres.Exec(ctx, query, messageID, url)
 	if err != nil {
 		return fmt.Errorf("failed to insert image: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Repository) AddAudio(ctx context.Context, messageID int, url string) error {
+	query := `
+	INSERT INTO hermes_data.audios (message_id, audio_url)
+	VALUES ($1, $2);
+	`
+
+	_, err := r.postgres.Exec(ctx, query, messageID, url)
+	if err != nil {
+		return fmt.Errorf("failed to insert audio: %w", err)
 	}
 
 	return nil

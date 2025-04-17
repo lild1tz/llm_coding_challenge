@@ -51,10 +51,10 @@ func GetBasicName(name string, number int, t time.Time, chatContextName string) 
 	return fileName
 }
 
-func GetDocxName(name string, number int, t time.Time, chatContextName string) string {
-	return GetBasicName(name, number, t, chatContextName) + ".docx"
+func GetFileName(name string, number int, timestamp time.Time, chatContextName string, postfix string) string {
+	return GetBasicName(name, number, timestamp, chatContextName) + postfix
 }
 
-func GetImageName(name string, number int, timestamp time.Time, chatContextName string, postfix string) string {
-	return GetBasicName(name, number, timestamp, chatContextName) + postfix
+func GetDocxName(name string, number int, timestamp time.Time, chatContextName string) string {
+	return GetFileName(name, number, timestamp, chatContextName, ".docx")
 }

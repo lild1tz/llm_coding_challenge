@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"time"
 
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/clients"
@@ -76,23 +74,10 @@ func (h *Handler) Handle(evt interface{}) {
 
 			go h.handleImageMessage(h.shutdownCtx, msg.GetImageMessage(), textMessage)
 		} else if msg.AudioMessage != nil {
-			// Generate a unique filename (e.g., timestamp)
-			filename := fmt.Sprintf("audio_%d.oga", time.Now().Unix())
+			fmt.Println("Тип: аудио")
+			fmt.Println("URL:", msg.AudioMessage.GetURL())
 
-			// Download the audio data
-			audioData, err := h.clients.Whatsapp.Download(msg.AudioMessage)
-			if err != nil {
-				fmt.Printf("Failed to download audio: %v\n", err)
-				return
-			}
-
-			err = os.WriteFile(filename, audioData, 0644)
-			if err != nil {
-				fmt.Printf("Failed to save audio: %v\n", err)
-				return
-			}
-
-			fmt.Printf("Saved audio to %s\n", filename)
+			go h.handleAudioMessage(h.shutdownCtx, msg.GetAudioMessage(), textMessage)
 		}
 	}
 }
@@ -110,6 +95,21 @@ func (h *Handler) handleImageMessage(ctx context.Context, msg whatsmeow.Download
 	h.recognizerManager.AsyncProcessImageMessage(models.ImageMessage{
 		TextMessage: textMessage,
 		Image:       data,
+	})
+
+	return nil
+}
+
+func (h *Handler) handleAudioMessage(ctx context.Context, msg whatsmeow.DownloadableMessage, textMessage models.TextMessage) error {
+	audioData, err := h.clients.Whatsapp.Download(msg)
+	if err != nil {
+		log.Printf("failed to download audio: %v", err)
+		return err
+	}
+
+	h.recognizerManager.AsyncProcessAudioMessage(models.AudioMessage{
+		TextMessage: textMessage,
+		Audio:       audioData,
 	})
 
 	return nil

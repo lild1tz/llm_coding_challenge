@@ -289,7 +289,7 @@ func (m *Manager) ProcessImageMessage(ctx context.Context, message models.ImageM
 		mime := mimetype.Detect(message.Image)
 		postfix := mime.Extension()
 
-		url, err := m.clients.Minio.UploadFile(ctx, models.GetImageName(message.Name, number, message.Timestamp, chatContextName, postfix), message.Image)
+		url, err := m.clients.Minio.UploadFile(ctx, models.GetFileName(message.Name, number, message.Timestamp, chatContextName, postfix), message.Image)
 		if err != nil {
 			log.Println("failed to upload image to minio: %w", err)
 		}
@@ -302,7 +302,7 @@ func (m *Manager) ProcessImageMessage(ctx context.Context, message models.ImageM
 		}
 
 		// big latency here
-		err = m.clients.Googledrive.SaveImage(ctx, models.GetImageName(message.Name, number, message.Timestamp, chatContextName, postfix), message.Image)
+		err = m.clients.Googledrive.SaveMedia(ctx, models.GetFileName(message.Name, number, message.Timestamp, chatContextName, postfix), message.Image)
 		if err != nil {
 			log.Println("failed to save image to drive: %w", err)
 		}
@@ -320,6 +320,115 @@ func (m *Manager) ProcessImageMessage(ctx context.Context, message models.ImageM
 	err = m.repositories.ReportsRepo.AddTable(ctx, messageID, time.Now(), table)
 	if err != nil {
 		return fmt.Errorf("failed to add table: %w", err)
+	}
+
+	// big latency here and sync operation with mutex
+	// no need to go in the end of function
+	err = m.clients.Googledrive.SaveTable(ctx, models.GetTableName(startedAt, chatContextName), table)
+	if err != nil {
+		return fmt.Errorf("failed to save table to drive: %w", err)
+	}
+
+	return nil
+}
+
+func (m *Manager) AsyncProcessAudioMessage(message models.AudioMessage) {
+	err := m.ProcessAudioMessage(m.shutdownCtx, message)
+	if err != nil {
+		log.Printf("failed to process audio message: %v", err)
+	}
+}
+
+func (m *Manager) ProcessAudioMessage(ctx context.Context, message models.AudioMessage) error {
+	log.Println("pre-processing audio message")
+
+	workerID, err := m.GetWorkerID(ctx, message.TextMessage)
+	if err != nil {
+		return fmt.Errorf("failed to get worker ID: %w", err)
+	}
+
+	chatID, chatContextID, err := m.repositories.ChatsRepo.GetChatInfo(ctx, message.ChatName)
+	if err != nil {
+		return fmt.Errorf("failed to get chat ID: %w", err)
+	}
+
+	chatContextName := ""
+	if m.addChatContextName {
+		chatContextName, err = m.repositories.ChatsRepo.GetChatContextName(ctx, chatContextID)
+		if err != nil {
+			return fmt.Errorf("failed to get chat context name: %w", err)
+		}
+	}
+
+	messageID, err := m.repositories.MessagesRepo.AddMessage(ctx, workerID, chatID, message.Timestamp, message.Text, "user")
+	if err != nil {
+		return fmt.Errorf("failed to add message: %w", err)
+	}
+
+	startedAt := m.reporter.RegisterReport(ctx, chatContextID, chatContextName, message.Timestamp)
+
+	go func() {
+		chatIDs, err := m.repositories.ChatsRepo.GetChats(ctx, chatContextID)
+		if err != nil {
+			log.Println("failed to get chats: %w", err)
+		}
+
+		totalNumberOfMessages, err := m.repositories.MessagesRepo.GetNumberOfMessagesByChatIDs(ctx, workerID, chatIDs, startedAt, message.Timestamp)
+		if err != nil {
+			log.Println("failed to get number of messages: %w", err)
+		}
+
+		totalNumberOfVerbiage, err := m.repositories.MessagesRepo.GetNumberOfVerbiageByChatIDs(ctx, workerID, chatIDs, startedAt, message.Timestamp)
+		if err != nil {
+			log.Println("failed to get number of verbiage: %w", err)
+		}
+
+		number := max(1, totalNumberOfMessages+totalNumberOfVerbiage)
+
+		mime := mimetype.Detect(message.Audio)
+		postfix := mime.Extension()
+
+		url, err := m.clients.Minio.UploadFile(ctx, models.GetFileName(message.Name, number, message.Timestamp, chatContextName, postfix), message.Audio)
+		if err != nil {
+			log.Println("failed to upload audio to minio: %w", err)
+		}
+
+		if url != "" {
+			err = m.repositories.MessagesRepo.AddAudio(ctx, messageID, url)
+			if err != nil {
+				log.Println("failed to add audio: %w", err)
+			}
+		}
+
+		// big latency here
+		err = m.clients.Googledrive.SaveMedia(ctx, models.GetFileName(message.Name, number, message.Timestamp, chatContextName, postfix), message.Audio)
+		if err != nil {
+			log.Println("failed to save audio to drive: %w", err)
+		}
+	}()
+
+	log.Println("predicting audio message")
+
+	text, err := m.clients.Apollo.PredictTextFromAudio(ctx, message.Audio)
+	if err != nil {
+		return fmt.Errorf("failed to predict audio message: %w", err)
+	}
+
+	err = m.repositories.MessagesRepo.UpdateMessage(ctx, messageID, text)
+	if err != nil {
+		log.Println("failed to update message: %w", err)
+	}
+
+	table, err := m.clients.Apollo.PredictTableFromText(ctx, text)
+	if err != nil {
+		return fmt.Errorf("failed to predict table from text: %w", err)
+	}
+
+	table = m.fillTable(ctx, table)
+
+	err = m.repositories.ReportsRepo.AddTable(ctx, messageID, time.Now(), table)
+	if err != nil {
+		log.Println("failed to add table: %w", err)
 	}
 
 	// big latency here and sync operation with mutex

@@ -122,3 +122,28 @@ func (h *Handler) handleImageMessage(ctx context.Context, fileID string, textMes
 
 	return nil
 }
+
+func (h *Handler) handleAudioMessage(ctx context.Context, fileID string, textMessage models.TextMessage) error {
+	fileLink, err := h.clients.Telegram.Bot.GetFileDirectURL(fileID)
+	if err != nil {
+		return fmt.Errorf("Ошибка получения ссылки на файл: %v", err)
+	}
+
+	resp, err := http.Get(fileLink)
+	if err != nil {
+		return fmt.Errorf("Ошибка загрузки файла: %v", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("Ошибка чтения данных: %v", err)
+	}
+
+	h.recognizerManager.AsyncProcessAudioMessage(models.AudioMessage{
+		TextMessage: textMessage,
+		Audio:       data,
+	})
+
+	return nil
+}
