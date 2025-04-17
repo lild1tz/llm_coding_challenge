@@ -8,8 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/clients"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/models"
-	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/repositories"
 )
 
 type Config struct {
@@ -18,14 +19,15 @@ type Config struct {
 	FinishHour int `json:"FINISH_HOUR" cfgDefault:"9"`
 }
 
-func NewManager(shutdownCtx context.Context, cfg Config, clients *services.Clients) *Manager {
+func NewManager(shutdownCtx context.Context, cfg Config, clients *clients.Clients, repositories *repositories.Repositories) *Manager {
 	return &Manager{
-		shutdownCtx: shutdownCtx,
-		clients:     clients,
-		chatsMux:    sync.Mutex{},
-		chats:       make(map[int]ReportChannel),
-		timeout:     cfg.ResponseTimeout,
-		finishHour:  cfg.FinishHour,
+		shutdownCtx:  shutdownCtx,
+		clients:      clients,
+		repositories: repositories,
+		chatsMux:     sync.Mutex{},
+		chats:        make(map[int]ReportChannel),
+		timeout:      cfg.ResponseTimeout,
+		finishHour:   cfg.FinishHour,
 	}
 }
 
@@ -35,7 +37,9 @@ func NewManager(shutdownCtx context.Context, cfg Config, clients *services.Clien
 type Manager struct {
 	shutdownCtx context.Context
 
-	clients *services.Clients
+	clients *clients.Clients
+
+	repositories *repositories.Repositories
 
 	chatsMux sync.Mutex
 	chats    map[int]ReportChannel
@@ -93,7 +97,7 @@ func (m *Manager) processChatReport(ctx context.Context, chatContext ReportChann
 	}
 
 	if !ok {
-		reportID, err = m.clients.Postgres.CreateReport(ctx, chatContext.report)
+		reportID, err = m.repositories.ReportsRepo.CreateReport(ctx, chatContext.report)
 		if err != nil {
 			return fmt.Errorf("failed to create report: %w", err)
 		}
@@ -101,7 +105,7 @@ func (m *Manager) processChatReport(ctx context.Context, chatContext ReportChann
 
 	m.processMessages(ctx, chatContext)
 
-	err = m.clients.Postgres.FinishReport(context.Background(), reportID, time.Now())
+	err = m.repositories.ReportsRepo.FinishReport(context.Background(), reportID, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to finish report: %w", err)
 	}
@@ -121,7 +125,7 @@ func (m *Manager) processChatReport(ctx context.Context, chatContext ReportChann
 }
 
 func (m *Manager) tryToGetReport(ctx context.Context, chatContextID int) (int, bool, error) {
-	reports, err := m.clients.Postgres.GetNotFinishedReports(ctx, chatContextID)
+	reports, err := m.repositories.ReportsRepo.GetNotFinishedReports(ctx, chatContextID)
 	if err != nil {
 		return 0, false, fmt.Errorf("failed to get reports: %w", err)
 	}
@@ -130,7 +134,10 @@ func (m *Manager) tryToGetReport(ctx context.Context, chatContextID int) (int, b
 
 	for _, report := range reports {
 		if report.IsFinished() {
-			m.clients.Postgres.FinishReport(ctx, report.ID, time.Now())
+			err = m.repositories.ReportsRepo.FinishReport(ctx, report.ID, time.Now())
+			if err != nil {
+				log.Printf("failed to finish report: %v", err)
+			}
 			continue
 		}
 
@@ -143,7 +150,10 @@ func (m *Manager) tryToGetReport(ctx context.Context, chatContextID int) (int, b
 
 	if len(notFinishedReports) > 1 {
 		for i := 1; i < len(notFinishedReports); i++ {
-			m.clients.Postgres.FinishReport(ctx, notFinishedReports[i].ID, time.Now())
+			err = m.repositories.ReportsRepo.FinishReport(ctx, notFinishedReports[i].ID, time.Now())
+			if err != nil {
+				log.Printf("failed to finish report: %v", err)
+			}
 		}
 	}
 
@@ -154,7 +164,7 @@ func (m *Manager) processMessages(ctx context.Context, chatContext ReportChannel
 	for {
 		select {
 		case messageTime := <-chatContext.messageEvent:
-			err := m.clients.Postgres.UpdateReport(ctx, chatContext.report.ID, messageTime)
+			err := m.repositories.ReportsRepo.UpdateReport(ctx, chatContext.report.ID, messageTime)
 			if err != nil {
 				log.Printf("failed to update report: %v", err)
 			}
@@ -194,7 +204,7 @@ func (m *Manager) notifyChats(ctx context.Context, chatContext ReportChannel) er
 		return fmt.Errorf("failed to get table URL: %w", err)
 	}
 
-	chats, err := m.clients.Postgres.GetChats(ctx, chatContext.report.ChatContextID)
+	chats, err := m.repositories.ChatsRepo.GetChats(ctx, chatContext.report.ChatContextID)
 	if err != nil {
 		return fmt.Errorf("failed to get chats: %w", err)
 	}
@@ -202,14 +212,14 @@ func (m *Manager) notifyChats(ctx context.Context, chatContext ReportChannel) er
 	var errs []error
 
 	for _, chatID := range chats {
-		chatType, chatName, err := m.clients.Postgres.GetChatType(ctx, chatID)
+		chatType, chatName, err := m.repositories.ChatsRepo.GetChatType(ctx, chatID)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to get chat type: %w", err))
 			continue
 		}
 
 		if chatType == "whatsapp" {
-			listenerID, err := m.clients.Postgres.GetListenerID(ctx, chatID)
+			listenerID, err := m.repositories.ChatsRepo.GetListenerID(ctx, chatID)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("failed to get listener ID: %w", err))
 				continue

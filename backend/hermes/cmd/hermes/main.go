@@ -15,16 +15,17 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/clients"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/managers/recognizer"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/managers/reporter"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/models"
-	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/repositories"
 	"github.com/lild1tz/llm_coding_challenge/backend/libs/go/config"
 	"go.mau.fi/whatsmeow/types/events"
 )
 
 type Config struct {
-	Services services.Config
+	Services clients.Config
 
 	Recognizer recognizer.Config
 	Reporter   reporter.Config
@@ -38,16 +39,18 @@ func main() {
 		log.Fatalf("failed to load config: %v", err)
 	}
 
-	clients, err := services.NewClients(cfg.Services)
+	clients, err := clients.NewClients(cfg.Services)
 	if err != nil {
 		log.Fatalf("failed to create clients: %v", err)
 	}
 
 	defer clients.Release()
 
-	reporter := reporter.NewManager(ctx, cfg.Reporter, clients)
+	repositories := repositories.NewRepositories(clients.Postgres)
 
-	manager := recognizer.NewManager(ctx, cfg.Recognizer, clients, reporter)
+	reporter := reporter.NewManager(ctx, cfg.Reporter, clients, repositories)
+
+	manager := recognizer.NewManager(ctx, cfg.Recognizer, clients, repositories, reporter)
 
 	clients.Whatsapp.AddEventHandler(func(evt interface{}) {
 		if ctx.Err() != nil {
@@ -64,7 +67,7 @@ func main() {
 			pushName := v.Info.PushName
 			timestamp := v.Info.Timestamp
 
-			found, err := clients.Postgres.FindChat(ctx, chatName)
+			found, err := repositories.ChatsRepo.FindChat(ctx, chatName)
 			if err != nil {
 				log.Printf("failed to find chat: %v", err)
 				return
@@ -160,7 +163,7 @@ func main() {
 		fmt.Println("content", content)
 		fmt.Println("timestamp", timestamp)
 
-		found, err := clients.Postgres.FindChat(ctx, chatName)
+		found, err := repositories.ChatsRepo.FindChat(ctx, chatName)
 		if err != nil {
 			log.Printf("failed to find chat: %v", err)
 			return nil

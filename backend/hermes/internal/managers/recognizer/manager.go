@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/gabriel-vasile/mimetype"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/clients"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/managers/reporter"
 	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/models"
-	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/repositories"
 )
 
 type Config struct {
@@ -20,10 +21,11 @@ type Config struct {
 	AddChatContextName bool `json:"ADD_CHAT_CONTEXT_NAME" cfgDefault:"true"`
 }
 
-func NewManager(shutdownCtx context.Context, cfg Config, clients *services.Clients, reporter *reporter.Manager) *Manager {
+func NewManager(shutdownCtx context.Context, cfg Config, clients *clients.Clients, repositories *repositories.Repositories, reporter *reporter.Manager) *Manager {
 	return &Manager{
 		shutdownCtx:        shutdownCtx,
 		clients:            clients,
+		repositories:       repositories,
 		reporter:           reporter,
 		filterVerbiage:     cfg.FilterVerbiage,
 		addChatContextName: cfg.AddChatContextName,
@@ -33,7 +35,9 @@ func NewManager(shutdownCtx context.Context, cfg Config, clients *services.Clien
 type Manager struct {
 	shutdownCtx context.Context
 
-	clients *services.Clients
+	clients *clients.Clients
+
+	repositories *repositories.Repositories
 
 	reporter *reporter.Manager
 
@@ -66,14 +70,14 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 		return fmt.Errorf("failed to get worker ID: %w", err)
 	}
 
-	chatID, chatContextID, err := m.clients.Postgres.GetChatInfo(ctx, message.ChatName)
+	chatID, chatContextID, err := m.repositories.ChatsRepo.GetChatInfo(ctx, message.ChatName)
 	if err != nil {
 		return fmt.Errorf("failed to get chat ID: %w", err)
 	}
 
 	chatContextName := ""
 	if m.addChatContextName {
-		chatContextName, err = m.clients.Postgres.GetChatContextName(ctx, chatContextID)
+		chatContextName, err = m.repositories.ChatsRepo.GetChatContextName(ctx, chatContextID)
 		if err != nil {
 			return fmt.Errorf("failed to get chat context name: %w", err)
 		}
@@ -82,12 +86,12 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 	var messageID int
 	if isVerbiage {
 		log.Println("verbiage message founded")
-		err = m.clients.Postgres.AddVerbiage(ctx, workerID, chatID, message.Timestamp, message.Text)
+		err = m.repositories.MessagesRepo.AddVerbiage(ctx, workerID, chatID, message.Timestamp, message.Text)
 		if err != nil {
 			return fmt.Errorf("failed to add Verbiage: %w", err)
 		}
 	} else {
-		messageID, err = m.clients.Postgres.AddMessage(ctx, workerID, chatID, message.Timestamp, message.Text, "user")
+		messageID, err = m.repositories.MessagesRepo.AddMessage(ctx, workerID, chatID, message.Timestamp, message.Text, "user")
 		if err != nil {
 			return fmt.Errorf("failed to add message: %w", err)
 		}
@@ -100,17 +104,17 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 	startedAt := m.reporter.RegisterReport(ctx, chatContextID, chatContextName, message.Timestamp)
 
 	go func() {
-		chatIDs, err := m.clients.Postgres.GetChats(ctx, chatContextID)
+		chatIDs, err := m.repositories.ChatsRepo.GetChats(ctx, chatContextID)
 		if err != nil {
 			log.Println("failed to get chats: %w", err)
 		}
 
-		totalNumberOfMessages, err := m.clients.Postgres.GetNumberOfMessagesByChatIDs(ctx, workerID, chatIDs, startedAt, message.Timestamp)
+		totalNumberOfMessages, err := m.repositories.MessagesRepo.GetNumberOfMessagesByChatIDs(ctx, workerID, chatIDs, startedAt, message.Timestamp)
 		if err != nil {
 			log.Println("failed to get number of messages: %w", err)
 		}
 
-		totalNumberOfVerbiage, err := m.clients.Postgres.GetNumberOfVerbiageByChatIDs(ctx, workerID, chatIDs, startedAt, message.Timestamp)
+		totalNumberOfVerbiage, err := m.repositories.MessagesRepo.GetNumberOfVerbiageByChatIDs(ctx, workerID, chatIDs, startedAt, message.Timestamp)
 		if err != nil {
 			log.Println("failed to get number of verbiage: %w", err)
 		}
@@ -133,7 +137,7 @@ func (m *Manager) ProcessTextMessage(ctx context.Context, message models.TextMes
 
 	table = m.fillTable(ctx, table)
 
-	err = m.clients.Postgres.AddTable(ctx, messageID, time.Now(), table)
+	err = m.repositories.ReportsRepo.AddTable(ctx, messageID, time.Now(), table)
 	if err != nil {
 		return fmt.Errorf("failed to add table: %w", err)
 	}
@@ -154,14 +158,14 @@ func (m *Manager) GetWorkerID(ctx context.Context, message models.TextMessage) (
 	}
 
 	if message.WhatsappID != nil {
-		workerID, err := m.clients.Postgres.GetWorkerIDByWhatsappID(ctx, *message.WhatsappID)
+		workerID, err := m.repositories.WorkersRepo.GetWorkerIDByWhatsappID(ctx, *message.WhatsappID)
 		if errors.Is(err, sql.ErrNoRows) {
-			workerID, err = m.clients.Postgres.InsertWorker(ctx, message.Name)
+			workerID, err = m.repositories.WorkersRepo.InsertWorker(ctx, message.Name)
 			if err != nil {
 				return 0, fmt.Errorf("failed to insert worker: %w", err)
 			}
 
-			err = m.clients.Postgres.InsertWhatsapp(ctx, *message.WhatsappID, workerID)
+			err = m.repositories.WorkersRepo.InsertWhatsapp(ctx, *message.WhatsappID, workerID)
 			if err != nil {
 				return 0, fmt.Errorf("failed to insert whatsapp: %w", err)
 			}
@@ -173,14 +177,14 @@ func (m *Manager) GetWorkerID(ctx context.Context, message models.TextMessage) (
 		return workerID, nil
 	}
 
-	workerID, err := m.clients.Postgres.GetWorkerIDByTelegramID(ctx, *message.TelegramID)
+	workerID, err := m.repositories.WorkersRepo.GetWorkerIDByTelegramID(ctx, *message.TelegramID)
 	if errors.Is(err, sql.ErrNoRows) {
-		workerID, err = m.clients.Postgres.InsertWorker(ctx, message.Name)
+		workerID, err = m.repositories.WorkersRepo.InsertWorker(ctx, message.Name)
 		if err != nil {
 			return 0, fmt.Errorf("failed to insert worker: %w", err)
 		}
 
-		err = m.clients.Postgres.InsertTelegram(ctx, *message.TelegramID, workerID)
+		err = m.repositories.WorkersRepo.InsertTelegram(ctx, *message.TelegramID, workerID)
 		if err != nil {
 			return 0, fmt.Errorf("failed to insert telegram: %w", err)
 		}
@@ -198,7 +202,7 @@ func (m *Manager) fillTable(ctx context.Context, table models.Table) models.Tabl
 			table[i].Date = time.Now().Format("02.01.2006")
 		}
 
-		exists, err := m.clients.Postgres.CheckCulture(ctx, row.Culture)
+		exists, err := m.repositories.InformationRepo.CheckCulture(ctx, row.Culture)
 		if err != nil {
 			log.Printf("failed to check culture: %v", err)
 		}
@@ -207,7 +211,7 @@ func (m *Manager) fillTable(ctx context.Context, table models.Table) models.Tabl
 			table[i].CultureYellow = true
 		}
 
-		exists, err = m.clients.Postgres.CheckOperation(ctx, row.Operation)
+		exists, err = m.repositories.InformationRepo.CheckOperation(ctx, row.Operation)
 		if err != nil {
 			log.Printf("failed to check operation: %v", err)
 		}
@@ -216,7 +220,7 @@ func (m *Manager) fillTable(ctx context.Context, table models.Table) models.Tabl
 			table[i].OperationYellow = true
 		}
 
-		exists, err = m.clients.Postgres.CheckDivision(ctx, row.Division)
+		exists, err = m.repositories.InformationRepo.CheckDivision(ctx, row.Division)
 		if err != nil {
 			log.Printf("failed to check division: %v", err)
 		}
@@ -244,20 +248,20 @@ func (m *Manager) ProcessImageMessage(ctx context.Context, message models.ImageM
 		return fmt.Errorf("failed to get worker ID: %w", err)
 	}
 
-	chatID, chatContextID, err := m.clients.Postgres.GetChatInfo(ctx, message.ChatName)
+	chatID, chatContextID, err := m.repositories.ChatsRepo.GetChatInfo(ctx, message.ChatName)
 	if err != nil {
 		return fmt.Errorf("failed to get chat ID: %w", err)
 	}
 
 	chatContextName := ""
 	if m.addChatContextName {
-		chatContextName, err = m.clients.Postgres.GetChatContextName(ctx, chatContextID)
+		chatContextName, err = m.repositories.ChatsRepo.GetChatContextName(ctx, chatContextID)
 		if err != nil {
 			return fmt.Errorf("failed to get chat context name: %w", err)
 		}
 	}
 
-	messageID, err := m.clients.Postgres.AddMessage(ctx, workerID, chatID, message.Timestamp, message.Text, "user")
+	messageID, err := m.repositories.MessagesRepo.AddMessage(ctx, workerID, chatID, message.Timestamp, message.Text, "user")
 	if err != nil {
 		return fmt.Errorf("failed to add message: %w", err)
 	}
@@ -265,17 +269,17 @@ func (m *Manager) ProcessImageMessage(ctx context.Context, message models.ImageM
 	startedAt := m.reporter.RegisterReport(ctx, chatContextID, chatContextName, message.Timestamp)
 
 	go func() {
-		chatIDs, err := m.clients.Postgres.GetChats(ctx, chatContextID)
+		chatIDs, err := m.repositories.ChatsRepo.GetChats(ctx, chatContextID)
 		if err != nil {
 			log.Println("failed to get chats: %w", err)
 		}
 
-		totalNumberOfMessages, err := m.clients.Postgres.GetNumberOfMessagesByChatIDs(ctx, workerID, chatIDs, startedAt, message.Timestamp)
+		totalNumberOfMessages, err := m.repositories.MessagesRepo.GetNumberOfMessagesByChatIDs(ctx, workerID, chatIDs, startedAt, message.Timestamp)
 		if err != nil {
 			log.Println("failed to get number of messages: %w", err)
 		}
 
-		totalNumberOfVerbiage, err := m.clients.Postgres.GetNumberOfVerbiageByChatIDs(ctx, workerID, chatIDs, startedAt, message.Timestamp)
+		totalNumberOfVerbiage, err := m.repositories.MessagesRepo.GetNumberOfVerbiageByChatIDs(ctx, workerID, chatIDs, startedAt, message.Timestamp)
 		if err != nil {
 			log.Println("failed to get number of verbiage: %w", err)
 		}
@@ -291,7 +295,7 @@ func (m *Manager) ProcessImageMessage(ctx context.Context, message models.ImageM
 		}
 
 		if url != "" {
-			err = m.clients.Postgres.AddImage(ctx, messageID, url)
+			err = m.repositories.MessagesRepo.AddImage(ctx, messageID, url)
 			if err != nil {
 				log.Println("failed to add image: %w", err)
 			}
@@ -313,7 +317,7 @@ func (m *Manager) ProcessImageMessage(ctx context.Context, message models.ImageM
 
 	table = m.fillTable(ctx, table)
 
-	err = m.clients.Postgres.AddTable(ctx, messageID, time.Now(), table)
+	err = m.repositories.ReportsRepo.AddTable(ctx, messageID, time.Now(), table)
 	if err != nil {
 		return fmt.Errorf("failed to add table: %w", err)
 	}

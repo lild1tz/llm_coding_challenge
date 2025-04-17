@@ -1,15 +1,15 @@
-package services
+package clients
 
 import (
 	"errors"
 	"fmt"
 
-	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/apollo"
-	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/googledrive"
-	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/minio"
-	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/postgres"
-	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/telegram"
-	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/services/whatsapp"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/clients/apollo"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/clients/googledrive"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/clients/minio"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/clients/postgres"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/clients/telegram"
+	"github.com/lild1tz/llm_coding_challenge/backend/hermes/internal/clients/whatsapp"
 )
 
 type Config struct {
