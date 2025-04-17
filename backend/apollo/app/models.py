@@ -27,7 +27,7 @@ class InputPhoto(BaseModel):
 
 class InputAudio(BaseModel):
     audio: str = Field(..., description="Аудиофайл в формате base64")
-    type: Literal["mp3", "wav"] = Field(..., description="Тип аудиофайла")
+    type: Literal["mp3", "wav", "ogg"] = Field(..., description="Тип аудиофайла")
 
 class OutputAudio(BaseModel):
     text: str = Field(..., description="Текст, полученный из аудиофайла")

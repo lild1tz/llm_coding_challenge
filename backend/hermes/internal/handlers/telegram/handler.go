@@ -83,6 +83,11 @@ func (h *Handler) Handle(ctx context.Context, update tgbotapi.Update) error {
 		}()
 	}
 
+	if update.Message.Audio != nil {
+		fmt.Println("Тип: аудио")
+		fmt.Println("fileID", update.Message.Audio.FileID)
+	}
+
 	if update.Message.Text != "" {
 		fmt.Println("Тип: текст")
 		fmt.Println("Текст:", textMessage.Text)
