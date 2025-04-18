@@ -53,36 +53,34 @@ services:
       context: ./backend
       dockerfile: hermes/Dockerfile
     environment:
-      DATABASE_URL: postgresql://hermes:password@postgres:5432/hermes?sslmode=disable
+      APOLLO_IS_STUB: "true"
 
-      APOLLO_IS_STUB: "false"
-
-      FILTER_VERBIAGE: "false"
+      FILTER_VERBIAGE: "true"
     depends_on:
       postgres:
         condition: service_healthy
-      # apollo:
-      #   condition: service_started
+      apollo:
+        condition: service_started
       minio:
         condition: service_healthy
     networks:
       - app-network
     restart: unless-stopped
 
-  # superset:
-  #   build:
-  #     context: ./backend/superset
-  #   env_file:
-  #     - ./backend/superset/.env
-  #   ports:
-  #     - "8088:8088"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   volumes:
-  #     - superset_home:/app/superset_home
-  #   networks:
-  #     - app-network
+  superset:
+    build:
+      context: ./backend/superset
+    env_file:
+      - ./backend/superset/.env
+    ports:
+      - "8088:8088"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - superset_home:/app/superset_home
+    networks:
+      - app-network
 
 networks:
   app-network:
