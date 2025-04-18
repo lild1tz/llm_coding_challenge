@@ -21,10 +21,10 @@ func (c *stubClient) PredictTableFromText(ctx context.Context, text string) (mod
 			Division:     "АОР",
 			Operation:    "Внесение минеральных удобрений",
 			Culture:      "Пшеница озимая товарная",
-			PerDay:       117,
-			PerOperation: 7381,
-			ValDay:       1560,
-			ValBeginning: 0,
+			PerDay:       "117",
+			PerOperation: "7381",
+			ValDay:       "1560",
+			ValBeginning: "0",
 		},
 	}, nil
 }
@@ -36,10 +36,10 @@ func (c *stubClient) PredictTableFromImage(ctx context.Context, image []byte) (m
 			Division:     "АОР",
 			Operation:    "Внесение минеральных удобрений",
 			Culture:      "Пшеница озимая товарная",
-			PerDay:       117,
-			PerOperation: 7381,
-			ValDay:       1560,
-			ValBeginning: 0,
+			PerDay:       "117",
+			PerOperation: "7381",
+			ValDay:       "1560",
+			ValBeginning: "0",
 		},
 	}, nil
 }
