@@ -378,7 +378,61 @@ erDiagram
 
 ```bash
 git clone https://github.com/lild1tz/llm_coding_challenge.git
-cd llm_coding_challenge/backend
+cd llm_coding_challenge
+```
+
+Для старта надо будет добавть .env в микросервисы
+
+### apollo
+
+```
+# backend/apollo/.env
+OPENAI_API_KEY="ваш ключ"
+OPENAI_MODEL="gpt-4o"
+OPENAI_BASE_URL="https://api.proxyapi.ru/openai/v1" # или ваш провайдер
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT="https://api.smith.langchain.com" # или ваш провайдер
+LANGSMITH_API_KEY="ваш ключ"
+LANGSMITH_PROJECT="ваш проект"
+BERT_MODEL="sentence-transformers/all-MiniLM-L6-v2"
+TRANSCRIBER_MODEL="whisper-1"
+
+```
+
+### hermes
+
+Чтобы получить DRIVE_JSON_KEY вам надо зарегестрироваться в google cloud console и выпустить сервисный аккаунт, и там можно для него выпустить ключ который будет в формате json (не забудьте дать вашему аккаунту доступ до папки)
+
+```
+DRIVE_JSON_KEY='Ваш json key'
+DRIVE_FOLDER_ID='ваш id папки'
+
+APOLLO_URL="http://apollo:8000"
+
+TELEGRAM_TOKEN="Ваш токен"
+
+S3_URL="http://minio:9000"
+S3_ACCESS_KEY="hermes"
+S3_SECRET_KEY="password"
+S3_BUCKET="hermes"
+
+DATABASE_URL="postgresql://hermes:password@postgres:5432/hermes?sslmode=disable" # или ваш пароль и пользователь
+
+```
+
+### superset
+```
+SUPERSET_ADMIN_USERNAME=admin # ваш логин
+SUPERSET_ADMIN_FIRSTNAME=Superset
+SUPERSET_ADMIN_LASTNAME=Admin
+SUPERSET_ADMIN_EMAIL=admin@superset.com
+SUPERSET_ADMIN_PASSWORD=admin # ваш пароль
+SUPERSET_SECRET_KEY=z7FjK2pQ9xY0e4WbR8vNl3sD5mU1tA6y
+SUPERSET_SQLALCHEMY_DATABASE_URI=postgresql://hermes:password@postgres:5432/hermes # или ваш пароль и пользователь
+```
+
+
+```
 docker-compose up --build -d
 ```
 
