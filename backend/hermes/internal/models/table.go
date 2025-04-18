@@ -20,10 +20,10 @@ type Line struct {
 	Culture       string `json:"culture"`
 	CultureYellow bool
 
-	PerDay       string `json:"per_day"`
-	PerOperation string `json:"per_operation"`
-	ValDay       string `json:"val_day"`
-	ValBeginning string `json:"val_beginning"`
+	PerDay       float64 `json:"per_day"`
+	PerOperation float64 `json:"per_operation"`
+	ValDay       float64 `json:"val_day"`
+	ValBeginning float64 `json:"val_beginning"`
 }
 
 type Table []Line
@@ -31,7 +31,7 @@ type Table []Line
 func GetTableName(t time.Time, chatContextName string) string {
 	t = loctime.Transfer(t)
 
-	fileName := t.Format("04м15ч02/01/2006") + "_AgroScientists"
+	fileName := t.Format("15ч02/01/2006") + "_AgroScientists"
 	if chatContextName != "" {
 		fileName += "_" + chatContextName
 	}
