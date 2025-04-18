@@ -20,10 +20,10 @@ type Line struct {
 	Culture       string `json:"culture"`
 	CultureYellow bool
 
-	PerDay       int `json:"per_day"`
-	PerOperation int `json:"per_operation"`
-	ValDay       int `json:"val_day"`
-	ValBeginning int `json:"val_beginning"`
+	PerDay       string `json:"per_day"`
+	PerOperation string `json:"per_operation"`
+	ValDay       string `json:"val_day"`
+	ValBeginning string `json:"val_beginning"`
 }
 
 type Table []Line
