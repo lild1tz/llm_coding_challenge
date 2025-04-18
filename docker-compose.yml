@@ -4,8 +4,8 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: hermes
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: hermes # ваш логин
+      POSTGRES_PASSWORD: password # ваш пароль
       POSTGRES_DB: hermes
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -23,8 +23,8 @@ services:
     image: minio/minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: hermes
-      MINIO_ROOT_PASSWORD: password
+      MINIO_ROOT_USER: hermes # ваш логин
+      MINIO_ROOT_PASSWORD: password # ваш пароль
     volumes:
       - minio_data:/data
     ports:
@@ -53,12 +53,9 @@ services:
       context: ./backend
       dockerfile: hermes/Dockerfile
     environment:
-      # DRIVE_FOLDER_ID: "1eQC0UKZnBMnHpEX8qqOhySZ_1dmL3vTz"
-      DRIVE_FOLDER_ID: "1f8zGMn2N4Nxn0vS_O8HHLHWNtOwKY1NW"
-      DATABASE_URL: postgresql://hermes:password@postgres:5432/hermes?sslmode=disable
+      DATABASE_URL: postgresql://hermes:password@postgres:5432/hermes?sslmode=disable # ваш логин и пароль
       APOLLO_IS_STUB: "false"
-
-      FILTER_VERBIAGE: "true"
+      FILTER_VERBIAGE: "true" # фильтр для отсеивания не нужных слов
     depends_on:
       postgres:
         condition: service_healthy
@@ -71,20 +68,20 @@ services:
 
     restart: unless-stopped
 
-  # superset:
-  #   build:
-  #     context: ./backend/superset
-  #   env_file:
-  #     - ./backend/superset/.env
-  #   ports:
-  #     - "8088:8088"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   volumes:
-  #     - superset_home:/app/superset_home
-  #   networks:
-  #     - app-network
+  superset:
+    build:
+      context: ./backend/superset
+    env_file:
+      - ./backend/superset/.env
+    ports:
+      - "8088:8088"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - superset_home:/app/superset_home
+    networks:
+      - app-network
 
 networks:
   app-network:

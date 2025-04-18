@@ -211,7 +211,7 @@ change_table_prompt = PromptTemplate(
 
 def message_photo_prompt(dataurl: str):
     message_photo_prompt = [
-        SystemMessage(content=prefix_text),
+        SystemMessage(content=suffix_text),
         HumanMessage(content=[
             {"type": "text", "text": f"""На основе этого фото и доплнительельной инфромации в таблицых  - ```cultures``` - список культур, ```operations``` - список операций,`
              ``units``` - список подразделений --- сделай правильную JSON таблицу с правильными значениями
