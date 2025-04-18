@@ -53,6 +53,8 @@ services:
       context: ./backend
       dockerfile: hermes/Dockerfile
     environment:
+      # DRIVE_FOLDER_ID: "1eQC0UKZnBMnHpEX8qqOhySZ_1dmL3vTz"
+      DRIVE_FOLDER_ID: "1f8zGMn2N4Nxn0vS_O8HHLHWNtOwKY1NW"
       DATABASE_URL: postgresql://hermes:password@postgres:5432/hermes?sslmode=disable
       APOLLO_IS_STUB: "false"
 
