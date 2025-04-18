@@ -314,7 +314,7 @@ erDiagram
   "type": "jpeg"
 }
 ```
-
+#### **Ответ**: аналогичен ответу /process_message.
 
 
 ### 📍 POST `/transcribe_audio`

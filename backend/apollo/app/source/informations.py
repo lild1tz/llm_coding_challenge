@@ -416,7 +416,7 @@ examples_text = [
     "output": safe_json([
       {
         "date": None,
-        "division": "Юг",
+        "division": "АОР",
         "operation": "Пахота",
         "culture": "Свекла сахарная",
         "per_day": 77,
