@@ -477,7 +477,7 @@ docker-compose restart hermes
 | Имя | Роль |  Компания | Телеграм |
 |-----|------|------------------------|----------|
 | **Александр Иванов** | Team Lead, MLE | СБЕР | @lild1tz |
-| **Валерий Хегай** | Go Developer | Яндекс, Backend Dev | @valerijhegaj |
+| **Валерий Хегай** | Go Developer | Яндекс | @valerijhegaj |
 | **Сергей Дементьев** | Product Analyst | Т‑Банк | @sdementev33 |
 
 ---
